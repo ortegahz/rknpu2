@@ -27,9 +27,15 @@
 
 static char* labels[OBJ_CLASS_NUM];
 
-const int anchor0[6] = {10, 13, 16, 30, 33, 23};
-const int anchor1[6] = {30, 61, 62, 45, 59, 119};
-const int anchor2[6] = {116, 90, 156, 198, 373, 326};
+// for yolov5
+// const int anchor0[6] = {10, 13, 16, 30, 33, 23};
+// const int anchor1[6] = {30, 61, 62, 45, 59, 119};
+// const int anchor2[6] = {116, 90, 156, 198, 373, 326};
+
+// for yolov7
+const int anchor0[6] = {12, 16, 19, 36, 40, 28};
+const int anchor1[6] = {36, 75, 76, 55, 72, 146};
+const int anchor2[6] = {142, 110, 192, 243, 459, 401};
 
 inline static int clamp(float val, int min, int max) { return val > min ? (val < max ? val : max) : min; }
 

@@ -1,0 +1,5 @@
+# demo
+./rknn_yolov5_demo ./model/RK3588/yolov5s-640-640.rknn ./model/bus.jpg
+./rknn_yolov5_demo ./model/RK3588/yolov5s.rknn ./model/bus.jpg
+./rknn_yolov5_demo ./model/RK3588/yolov7_tk2_RK3588_i8.rknn ./model/bus.jpg
+./rknn_yolov5_demo ./model/RK3588/yolov7.rknn ./model/bus.jpg
