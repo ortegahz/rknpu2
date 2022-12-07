@@ -200,41 +200,39 @@ static int process_acfree(int8_t* input_c, int8_t* input_b, int grid_h, int grid
   int    grid_len   = grid_h * grid_w;
   float  thres      = unsigmoid(threshold);
   int8_t thres_i8_c   = qnt_f32_to_affine(thres, zp_c, scale_c);
-  int8_t thres_i8_b   = qnt_f32_to_affine(thres, zp_b, scale_b);
   for (int i = 0; i < grid_h; i++) {
     for (int j = 0; j < grid_w; j++) {
-      int8_t box_confidence = 127;
-      if (box_confidence >= thres_i8_c) {
+          int     offset_c = i * grid_w + j;
+          int8_t* in_ptr_c = input_c + offset_c;
 
-        int     offset_b = i * grid_w + j;
-        int8_t* in_ptr_b = input_b + offset_b;
-
-        float   box_l  = deqnt_affine_to_f32(*in_ptr_b, zp_b, scale_b);
-        float   box_t  = deqnt_affine_to_f32(in_ptr_b[grid_len], zp_b, scale_b);
-        float   box_r  = deqnt_affine_to_f32(in_ptr_b[2 * grid_len], zp_b, scale_b);
-        float   box_b  = deqnt_affine_to_f32(in_ptr_b[3 * grid_len], zp_b, scale_b);
-        float box_x1 = j - box_l + 0.5;
-        float box_y1 = i - box_t + 0.5;
-        float box_x2 = j + box_r + 0.5;
-        float box_y2 = i + box_b + 0.5;
-        float box_x = box_x1 * (float)stride;
-        float box_y = box_y1 * (float)stride;
-        float box_w = (box_x2 - box_x1) * (float)stride;
-        float box_h = (box_y2 - box_y1) * (float)stride;
-
-        int     offset_c = i * grid_w + j;
-        int8_t* in_ptr_c = input_c + offset_c;
-
-        int8_t maxClassProbs = in_ptr_c[0];
-        int    maxClassId    = 0;
-        for (int k = 1; k < OBJ_CLASS_NUM; ++k) {
-          int8_t prob = in_ptr_c[(0 + k) * grid_len];
-          if (prob > maxClassProbs) {
-            maxClassId    = k;
-            maxClassProbs = prob;
+          int8_t maxClassProbs = in_ptr_c[0];
+          int    maxClassId    = 0;
+          for (int k = 1; k < OBJ_CLASS_NUM; ++k) {
+            int8_t prob = in_ptr_c[(0 + k) * grid_len];
+            if (prob > maxClassProbs) {
+              maxClassId    = k;
+              maxClassProbs = prob;
+            }
           }
-        }
-        if (maxClassProbs>thres_i8_c){
+
+          if (maxClassProbs < thres_i8_c) continue;
+
+          int     offset_b = i * grid_w + j;
+          int8_t* in_ptr_b = input_b + offset_b;
+
+          float   box_l  = deqnt_affine_to_f32(*in_ptr_b, zp_b, scale_b);
+          float   box_t  = deqnt_affine_to_f32(in_ptr_b[grid_len], zp_b, scale_b);
+          float   box_r  = deqnt_affine_to_f32(in_ptr_b[2 * grid_len], zp_b, scale_b);
+          float   box_b  = deqnt_affine_to_f32(in_ptr_b[3 * grid_len], zp_b, scale_b);
+          float box_x1 = j - box_l + 0.5;
+          float box_y1 = i - box_t + 0.5;
+          float box_x2 = j + box_r + 0.5;
+          float box_y2 = i + box_b + 0.5;
+          float box_x = box_x1 * (float)stride;
+          float box_y = box_y1 * (float)stride;
+          float box_w = (box_x2 - box_x1) * (float)stride;
+          float box_h = (box_y2 - box_y1) * (float)stride;
+
           objProbs.push_back(sigmoid(deqnt_affine_to_f32(maxClassProbs, zp_c, scale_c)) * 1.0);
           classId.push_back(maxClassId);
           validCount++;
@@ -242,8 +240,6 @@ static int process_acfree(int8_t* input_c, int8_t* input_b, int grid_h, int grid
           boxes.push_back(box_y);
           boxes.push_back(box_w);
           boxes.push_back(box_h);
-        }
-      }
     }
   }
   return validCount;
