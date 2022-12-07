@@ -1,5 +1,14 @@
-# demo
+# compile
+cd /media/manu/kingstop/workspace/rknpu2/examples/rknn_yolov5_demo
+./build-linux_RK3588.sh
+
+# run
 ./rknn_yolov5_demo ./model/RK3588/yolov5s-640-640.rknn ./model/bus.jpg
 ./rknn_yolov5_demo ./model/RK3588/yolov5s.rknn ./model/bus.jpg
 ./rknn_yolov5_demo ./model/RK3588/yolov7_tk2_RK3588_i8.rknn ./model/bus.jpg
 ./rknn_yolov5_demo ./model/RK3588/yolov7.rknn ./model/bus.jpg
+./rknn_yolov5_demo ./model/RK3588/acfree.rknn ./model/bus.jpg
+
+# debug
+gdbserver 192.168.1.128:8005 ./rknn_yolov5_demo ./model/RK3588/yolov7.rknn ./model/bus.jpg
+gdbserver 192.168.1.128:8005 ./rknn_yolov5_demo ./model/RK3588/acfree.rknn ./model/bus.jpg
