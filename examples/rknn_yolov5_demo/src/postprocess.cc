@@ -329,7 +329,7 @@ int post_process_acfree(int8_t* input0, int8_t* input1, int8_t* input2, int8_t* 
   int grid_h1     = model_in_h / stride1;
   int grid_w1     = model_in_w / stride1;
   int validCount1 = 0;
-  validCount0 = process_acfree(input1, input4, grid_h1, grid_w1, model_in_h, model_in_w, stride1, filterBoxes, objProbs,
+  validCount1 = process_acfree(input1, input4, grid_h1, grid_w1, model_in_h, model_in_w, stride1, filterBoxes, objProbs,
                         classId, conf_threshold, qnt_zps[1], qnt_scales[1], qnt_zps[4], qnt_scales[4]);
 
   // stride 32
@@ -337,7 +337,7 @@ int post_process_acfree(int8_t* input0, int8_t* input1, int8_t* input2, int8_t* 
   int grid_h2     = model_in_h / stride2;
   int grid_w2     = model_in_w / stride2;
   int validCount2 = 0;
-  validCount0 = process_acfree(input2, input5, grid_h2, grid_w2, model_in_h, model_in_w, stride2, filterBoxes, objProbs,
+  validCount2 = process_acfree(input2, input5, grid_h2, grid_w2, model_in_h, model_in_w, stride2, filterBoxes, objProbs,
                         classId, conf_threshold, qnt_zps[2], qnt_scales[2], qnt_zps[5], qnt_scales[5]);
 
   int validCount = validCount0 + validCount1 + validCount2;

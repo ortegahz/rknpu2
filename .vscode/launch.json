@@ -19,7 +19,7 @@
             "externalConsole": false,
             "MIMode": "gdb",
             "miDebuggerPath": "/home/manu/softwares/gcc-buildroot-9.3.0-2020.03-x86_64_aarch64-rockchip-linux-gnu/bin/aarch64-rockchip-linux-gnu-gdb",
-            "miDebuggerServerAddress": "192.168.1.113:8005",
+            "miDebuggerServerAddress": "192.168.1.107:8005",
             "setupCommands": [
                 {
                     "description": "为 gdb 启用整齐打印",
