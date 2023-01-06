@@ -3,6 +3,8 @@ cd /media/manu/kingstop/workspace/rknpu2/examples/rknn_yolov5_demo
 ./build-linux_RK3588.sh
 
 # run
+ssh root@192.168.1.107
+rockchip
 busybox mount -t nfs 192.168.1.128:/home/manu/nfs /mnt_manu -o nolock && cd /mnt_manu/tmp/install/rknn_yolov5_demo_Linux
 
 ./rknn_yolov5_demo ./model/RK3588/yolov5s-640-640.rknn ./model/bus.jpg
@@ -11,7 +13,10 @@ busybox mount -t nfs 192.168.1.128:/home/manu/nfs /mnt_manu -o nolock && cd /mnt
 ./rknn_yolov5_demo ./model/RK3588/yolov7.rknn ./model/bus.jpg
 ./rknn_yolov5_demo ./model/RK3588/acfree.rknn ./model/bus.jpg
 ./rknn_yolov5_demo ./model/RK3588/acfree.rknn ./model/students_lb.bmp
+./rknn_yolov5_demo ./model/RK3588/s3fd.rknn ./model/students_lt.bmp
+./rknn_yolov5_demo ./model/RK3588/s3fd.rknn ./model/bus.jpg
 
 # debug
 gdbserver 192.168.1.128:8005 ./rknn_yolov5_demo ./model/RK3588/yolov7.rknn ./model/bus.jpg
 gdbserver 192.168.1.128:8005 ./rknn_yolov5_demo ./model/RK3588/acfree.rknn ./model/bus.jpg
+gdbserver 192.168.1.128:8005 ./rknn_yolov5_demo ./model/RK3588/s3fd.rknn ./model/students_lt.bmp
