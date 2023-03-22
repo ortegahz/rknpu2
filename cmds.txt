@@ -11,6 +11,7 @@ busybox mount -t nfs 192.168.1.128:/home/manu/nfs /mnt_manu -o nolock && cd /mnt
 ./rknn_yolov5_demo ./model/RK3588/yolov7.rknn ./model/bus.jpg
 ./rknn_yolov5_demo ./model/RK3588/acfree.rknn ./model/bus.jpg
 ./rknn_yolov5_demo ./model/RK3588/acfree.rknn ./model/students_lb.bmp
+./rknn_yolov5_demo ./model/RK3588/acfree_head_1280.rknn ./model/sylgd_rp.bmp
 
 # debug
 gdbserver 192.168.1.128:8005 ./rknn_yolov5_demo ./model/RK3588/yolov7.rknn ./model/bus.jpg

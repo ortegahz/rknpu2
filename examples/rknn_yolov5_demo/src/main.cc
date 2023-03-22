@@ -282,6 +282,8 @@ int main(int argc, char** argv)
   //              box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
   post_process_acfree((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, (int8_t*)outputs[3].buf, (int8_t*)outputs[4].buf, (int8_t*)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
 
+printf("number of detected objs --> %d\n", detect_result_group.count);
+
   // Draw Objects
   char text[256];
   for (int i = 0; i < detect_result_group.count; i++) {
