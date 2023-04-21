@@ -272,6 +272,7 @@ int main(int argc, char** argv)
   float scale_h = (float)height / img_height;
 
   detect_result_group_t detect_result_group;
+  detect_result_group_t detect_result_group_face;
   std::vector<float>    out_scales;
   std::vector<int32_t>  out_zps;
   for (int i = 0; i < io_num.n_output; ++i) {
@@ -280,7 +281,9 @@ int main(int argc, char** argv)
   }
   // post_process((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, height, width,
   //              box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
-  post_process_acfree((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, (int8_t*)outputs[3].buf, (int8_t*)outputs[4].buf, (int8_t*)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+  // post_process_acfree((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, (int8_t*)outputs[3].buf, (int8_t*)outputs[4].buf, (int8_t*)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+  post_process_acfree_mp_head((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, (int8_t*)outputs[3].buf, (int8_t*)outputs[4].buf, (int8_t*)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+  post_process_acfree_mp_face((int8_t*)outputs[6].buf, (int8_t*)outputs[7].buf, (int8_t*)outputs[8].buf, (int8_t*)outputs[9].buf, (int8_t*)outputs[10].buf, (int8_t*)outputs[11].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group_face);
 
   // Draw Objects
   char text[256];
@@ -293,8 +296,36 @@ int main(int argc, char** argv)
     int y1 = det_result->box.top;
     int x2 = det_result->box.right;
     int y2 = det_result->box.bottom;
-    rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(255, 0, 0, 255), 3);
-    putText(orig_img, text, cv::Point(x1, y1 + 12), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0));
+    rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(255, 0, 0, 255), 1);
+    // putText(orig_img, text, cv::Point(x1, y1 + 12), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0));
+  }
+
+  for (int i = 0; i < detect_result_group_face.count; i++) {
+    detect_result_t* det_result = &(detect_result_group_face.results[i]);
+    sprintf(text, "%s %.1f%%", det_result->name, det_result->prop * 100);
+    printf("%s @ (%d %d %d %d) %f\n", det_result->name, det_result->box.left, det_result->box.top,
+           det_result->box.right, det_result->box.bottom, det_result->prop);
+    int x1 = det_result->box.left;
+    int y1 = det_result->box.top;
+    int x2 = det_result->box.right;
+    int y2 = det_result->box.bottom;
+    rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 0, 255, 255), 1);
+    // putText(orig_img, text, cv::Point(x1, y1 + 12), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0));
+    int kp1_x = det_result->kps.kp1_x;
+    int kp1_y = det_result->kps.kp1_y;
+    circle(orig_img, cv::Point(kp1_x, kp1_y), 1, cv::Scalar(255, 0, 0), -1);
+    int kp2_x = det_result->kps.kp2_x;
+    int kp2_y = det_result->kps.kp2_y;
+    circle(orig_img, cv::Point(kp2_x, kp2_y), 1, cv::Scalar(0, 255, 0), -1);
+    int kp3_x = det_result->kps.kp3_x;
+    int kp3_y = det_result->kps.kp3_y;
+    circle(orig_img, cv::Point(kp3_x, kp3_y), 1, cv::Scalar(0, 0, 255), -1);
+    int kp4_x = det_result->kps.kp4_x;
+    int kp4_y = det_result->kps.kp4_y;
+    circle(orig_img, cv::Point(kp4_x, kp4_y), 1, cv::Scalar(255, 255, 0), -1);
+    int kp5_x = det_result->kps.kp5_x;
+    int kp5_y = det_result->kps.kp5_y;
+    circle(orig_img, cv::Point(kp5_x, kp5_y), 1, cv::Scalar(0, 255, 255), -1);
   }
 
   imwrite("./out.jpg", orig_img);
@@ -310,7 +341,9 @@ int main(int argc, char** argv)
 #if PERF_WITH_POST
     // post_process((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, height, width,
     //              box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
-  post_process_acfree((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, (int8_t*)outputs[3].buf, (int8_t*)outputs[4].buf, (int8_t*)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+  // post_process_acfree((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, (int8_t*)outputs[3].buf, (int8_t*)outputs[4].buf, (int8_t*)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+  post_process_acfree_mp_head((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, (int8_t*)outputs[3].buf, (int8_t*)outputs[4].buf, (int8_t*)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+  post_process_acfree_mp_face((int8_t*)outputs[6].buf, (int8_t*)outputs[7].buf, (int8_t*)outputs[8].buf, (int8_t*)outputs[9].buf, (int8_t*)outputs[10].buf, (int8_t*)outputs[11].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group_face);
 #endif
     ret = rknn_outputs_release(ctx, io_num.n_output, outputs);
   }

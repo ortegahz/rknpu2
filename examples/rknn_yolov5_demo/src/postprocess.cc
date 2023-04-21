@@ -245,6 +245,133 @@ static int process_acfree(int8_t* input_c, int8_t* input_b, int grid_h, int grid
   return validCount;
 }
 
+static int process_acfree_face(int8_t* input_c, int8_t* input_b, int grid_h, int grid_w, int height, int width, int stride,
+                   std::vector<float>& boxes, std::vector<float>& kpss, std::vector<float>& objProbs, std::vector<int>& classId, float threshold,
+                   int32_t zp_c, float scale_c, int32_t zp_b, float scale_b)
+{
+  int    validCount = 0;
+  int    grid_len   = grid_h * grid_w;
+  float  thres      = unsigmoid(threshold);
+  int8_t thres_i8_c   = qnt_f32_to_affine(thres, zp_c, scale_c);
+  for (int i = 0; i < grid_h; i++) {
+    for (int j = 0; j < grid_w; j++) {
+          int     offset_c = i * grid_w + j;
+          int8_t* in_ptr_c = input_c + offset_c;
+
+          int8_t maxClassProbs = in_ptr_c[0];
+          int    maxClassId    = 0;
+          for (int k = 1; k < OBJ_CLASS_NUM; ++k) {
+            int8_t prob = in_ptr_c[(0 + k) * grid_len];
+            if (prob > maxClassProbs) {
+              maxClassId    = k;
+              maxClassProbs = prob;
+            }
+          }
+
+          if (maxClassProbs < thres_i8_c) continue;
+
+          int     offset_b = i * grid_w + j;
+          int8_t* in_ptr_b = input_b + offset_b;
+
+          float   box_l  = deqnt_affine_to_f32(*in_ptr_b, zp_b, scale_b);
+          float   box_t  = deqnt_affine_to_f32(in_ptr_b[grid_len], zp_b, scale_b);
+          float   box_r  = deqnt_affine_to_f32(in_ptr_b[2 * grid_len], zp_b, scale_b);
+          float   box_b  = deqnt_affine_to_f32(in_ptr_b[3 * grid_len], zp_b, scale_b);
+          float box_x1 = j - box_l + 0.5;
+          float box_y1 = i - box_t + 0.5;
+          float box_x2 = j + box_r + 0.5;
+          float box_y2 = i + box_b + 0.5;
+          float box_x = box_x1 * (float)stride;
+          float box_y = box_y1 * (float)stride;
+          float box_w = (box_x2 - box_x1) * (float)stride;
+          float box_h = (box_y2 - box_y1) * (float)stride;
+
+          float   kp1_x  = (deqnt_affine_to_f32(in_ptr_b[4 * grid_len], zp_b, scale_b) + j + 0.5) * (float)stride;
+          float   kp1_y  = (deqnt_affine_to_f32(in_ptr_b[5 * grid_len], zp_b, scale_b) + i + 0.5) * (float)stride;
+          float   kp2_x  = (deqnt_affine_to_f32(in_ptr_b[6 * grid_len], zp_b, scale_b) + j + 0.5) * (float)stride;
+          float   kp2_y  = (deqnt_affine_to_f32(in_ptr_b[7 * grid_len], zp_b, scale_b) + i + 0.5) * (float)stride;
+          float   kp3_x  = (deqnt_affine_to_f32(in_ptr_b[8 * grid_len], zp_b, scale_b) + j + 0.5) * (float)stride;
+          float   kp3_y  = (deqnt_affine_to_f32(in_ptr_b[9 * grid_len], zp_b, scale_b) + i + 0.5) * (float)stride;
+          float   kp4_x  = (deqnt_affine_to_f32(in_ptr_b[10 * grid_len], zp_b, scale_b) + j + 0.5) * (float)stride;
+          float   kp4_y  = (deqnt_affine_to_f32(in_ptr_b[11 * grid_len], zp_b, scale_b) + i + 0.5) * (float)stride;
+          float   kp5_x  = (deqnt_affine_to_f32(in_ptr_b[12 * grid_len], zp_b, scale_b) + j + 0.5) * (float)stride;
+          float   kp5_y  = (deqnt_affine_to_f32(in_ptr_b[13 * grid_len], zp_b, scale_b) + i + 0.5) * (float)stride;
+
+          objProbs.push_back(sigmoid(deqnt_affine_to_f32(maxClassProbs, zp_c, scale_c)) * 1.0);
+          classId.push_back(maxClassId);
+          validCount++;
+          boxes.push_back(box_x);
+          boxes.push_back(box_y);
+          boxes.push_back(box_w);
+          boxes.push_back(box_h);
+          kpss.push_back(kp1_x);
+          kpss.push_back(kp1_y);
+          kpss.push_back(kp2_x);
+          kpss.push_back(kp2_y);
+          kpss.push_back(kp3_x);
+          kpss.push_back(kp3_y);
+          kpss.push_back(kp4_x);
+          kpss.push_back(kp4_y);
+          kpss.push_back(kp5_x);
+          kpss.push_back(kp5_y);
+    }
+  }
+  return validCount;
+}
+
+static int process_acfree_head(int8_t* input_c, int8_t* input_b, int grid_h, int grid_w, int height, int width, int stride,
+                   std::vector<float>& boxes, std::vector<float>& objProbs, std::vector<int>& classId, float threshold,
+                   int32_t zp_c, float scale_c, int32_t zp_b, float scale_b)
+{
+  int    validCount = 0;
+  int    grid_len   = grid_h * grid_w;
+  float  thres      = unsigmoid(threshold);
+  int8_t thres_i8_c   = qnt_f32_to_affine(thres, zp_c, scale_c);
+  for (int i = 0; i < grid_h; i++) {
+    for (int j = 0; j < grid_w; j++) {
+          int     offset_c = i * grid_w + j;
+          int8_t* in_ptr_c = input_c + offset_c;
+
+          int8_t maxClassProbs = in_ptr_c[0];
+          int    maxClassId    = 0;
+          for (int k = 1; k < OBJ_CLASS_NUM; ++k) {
+            int8_t prob = in_ptr_c[(0 + k) * grid_len];
+            if (prob > maxClassProbs) {
+              maxClassId    = k;
+              maxClassProbs = prob;
+            }
+          }
+
+          if (maxClassProbs < thres_i8_c) continue;
+
+          int     offset_b = i * grid_w + j;
+          int8_t* in_ptr_b = input_b + offset_b;
+
+          float   box_l  = deqnt_affine_to_f32(*in_ptr_b, zp_b, scale_b);
+          float   box_t  = deqnt_affine_to_f32(in_ptr_b[grid_len], zp_b, scale_b);
+          float   box_r  = deqnt_affine_to_f32(in_ptr_b[2 * grid_len], zp_b, scale_b);
+          float   box_b  = deqnt_affine_to_f32(in_ptr_b[3 * grid_len], zp_b, scale_b);
+          float box_x1 = j - box_l + 0.5;
+          float box_y1 = i - box_t + 0.5;
+          float box_x2 = j + box_r + 0.5;
+          float box_y2 = i + box_b + 0.5;
+          float box_x = box_x1 * (float)stride;
+          float box_y = box_y1 * (float)stride;
+          float box_w = (box_x2 - box_x1) * (float)stride;
+          float box_h = (box_y2 - box_y1) * (float)stride;
+
+          objProbs.push_back(sigmoid(deqnt_affine_to_f32(maxClassProbs, zp_c, scale_c)) * 1.0);
+          classId.push_back(maxClassId);
+          validCount++;
+          boxes.push_back(box_x);
+          boxes.push_back(box_y);
+          boxes.push_back(box_w);
+          boxes.push_back(box_h);
+    }
+  }
+  return validCount;
+}
+
 static int process(int8_t* input, int* anchor, int grid_h, int grid_w, int height, int width, int stride,
                    std::vector<float>& boxes, std::vector<float>& objProbs, std::vector<int>& classId, float threshold,
                    int32_t zp, float scale)
@@ -338,6 +465,223 @@ int post_process_acfree(int8_t* input0, int8_t* input1, int8_t* input2, int8_t* 
   int grid_w2     = model_in_w / stride2;
   int validCount2 = 0;
   validCount2 = process_acfree(input2, input5, grid_h2, grid_w2, model_in_h, model_in_w, stride2, filterBoxes, objProbs,
+                        classId, conf_threshold, qnt_zps[2], qnt_scales[2], qnt_zps[5], qnt_scales[5]);
+
+  int validCount = validCount0 + validCount1 + validCount2;
+  // no object detect
+  if (validCount <= 0) {
+    return 0;
+  }
+
+  std::vector<int> indexArray;
+  for (int i = 0; i < validCount; ++i) {
+    indexArray.push_back(i);
+  }
+
+  quick_sort_indice_inverse(objProbs, 0, validCount - 1, indexArray);
+
+  std::set<int> class_set(std::begin(classId), std::end(classId));
+
+  for (auto c : class_set) {
+    nms(validCount, filterBoxes, classId, indexArray, c, nms_threshold);
+  }
+
+  int last_count = 0;
+  group->count   = 0;
+  /* box valid detect target */
+  for (int i = 0; i < validCount; ++i) {
+    if (indexArray[i] == -1 || last_count >= OBJ_NUMB_MAX_SIZE) {
+      continue;
+    }
+    int n = indexArray[i];
+
+    float x1       = filterBoxes[n * 4 + 0];
+    float y1       = filterBoxes[n * 4 + 1];
+    float x2       = x1 + filterBoxes[n * 4 + 2];
+    float y2       = y1 + filterBoxes[n * 4 + 3];
+    int   id       = classId[n];
+    float obj_conf = objProbs[i];
+
+    group->results[last_count].box.left   = (int)(clamp(x1, 0, model_in_w) / scale_w);
+    group->results[last_count].box.top    = (int)(clamp(y1, 0, model_in_h) / scale_h);
+    group->results[last_count].box.right  = (int)(clamp(x2, 0, model_in_w) / scale_w);
+    group->results[last_count].box.bottom = (int)(clamp(y2, 0, model_in_h) / scale_h);
+    group->results[last_count].prop       = obj_conf;
+    char* label                           = labels[id];
+    strncpy(group->results[last_count].name, label, OBJ_NAME_MAX_SIZE);
+
+    // printf("result %2d: (%4d, %4d, %4d, %4d), %s\n", i, group->results[last_count].box.left,
+    // group->results[last_count].box.top,
+    //        group->results[last_count].box.right, group->results[last_count].box.bottom, label);
+    last_count++;
+  }
+  group->count = last_count;
+
+  return 0;
+}
+
+int post_process_acfree_mp_face(int8_t* input0, int8_t* input1, int8_t* input2, int8_t* input3, int8_t* input4, int8_t* input5, int model_in_h, int model_in_w, float conf_threshold,
+                 float nms_threshold, float scale_w, float scale_h, std::vector<int32_t>& qnt_zps,
+                 std::vector<float>& qnt_scales, detect_result_group_t* group)
+{
+  static int init = -1;
+  if (init == -1) {
+    int ret = 0;
+    ret     = loadLabelName(LABEL_NALE_TXT_PATH, labels);
+    if (ret < 0) {
+      return -1;
+    }
+
+    init = 0;
+  }
+  memset(group, 0, sizeof(detect_result_group_t));
+
+  std::vector<float> filterKpss;
+  std::vector<float> filterBoxes;
+  std::vector<float> objProbs;
+  std::vector<int>   classId;
+
+  // stride 8
+  int stride0     = 8;
+  int grid_h0     = model_in_h / stride0;
+  int grid_w0     = model_in_w / stride0;
+  int validCount0 = 0;
+  validCount0 = process_acfree_face(input0, input3, grid_h0, grid_w0, model_in_h, model_in_w, stride0, filterBoxes, filterKpss, objProbs,
+                        classId, conf_threshold, qnt_zps[6], qnt_scales[6], qnt_zps[9], qnt_scales[9]);
+
+  // stride 16
+  int stride1     = 16;
+  int grid_h1     = model_in_h / stride1;
+  int grid_w1     = model_in_w / stride1;
+  int validCount1 = 0;
+  validCount1 = process_acfree_face(input1, input4, grid_h1, grid_w1, model_in_h, model_in_w, stride1, filterBoxes, filterKpss, objProbs,
+                        classId, conf_threshold, qnt_zps[7], qnt_scales[7], qnt_zps[10], qnt_scales[10]);
+
+  // stride 32
+  int stride2     = 32;
+  int grid_h2     = model_in_h / stride2;
+  int grid_w2     = model_in_w / stride2;
+  int validCount2 = 0;
+  validCount2 = process_acfree_face(input2, input5, grid_h2, grid_w2, model_in_h, model_in_w, stride2, filterBoxes, filterKpss, objProbs,
+                        classId, conf_threshold, qnt_zps[8], qnt_scales[8], qnt_zps[11], qnt_scales[11]);
+
+  int validCount = validCount0 + validCount1 + validCount2;
+  // no object detect
+  if (validCount <= 0) {
+    return 0;
+  }
+
+  std::vector<int> indexArray;
+  for (int i = 0; i < validCount; ++i) {
+    indexArray.push_back(i);
+  }
+
+  quick_sort_indice_inverse(objProbs, 0, validCount - 1, indexArray);
+
+  std::set<int> class_set(std::begin(classId), std::end(classId));
+
+  for (auto c : class_set) {
+    nms(validCount, filterBoxes, classId, indexArray, c, nms_threshold);
+  }
+
+  int last_count = 0;
+  group->count   = 0;
+  /* box valid detect target */
+  for (int i = 0; i < validCount; ++i) {
+    if (indexArray[i] == -1 || last_count >= OBJ_NUMB_MAX_SIZE) {
+      continue;
+    }
+    int n = indexArray[i];
+
+    float kp1_x       = filterKpss[n * 10 + 0];
+    float kp1_y       = filterKpss[n * 10 + 1];
+    float kp2_x       = filterKpss[n * 10 + 2];
+    float kp2_y       = filterKpss[n * 10 + 3];
+    float kp3_x       = filterKpss[n * 10 + 4];
+    float kp3_y       = filterKpss[n * 10 + 5];
+    float kp4_x       = filterKpss[n * 10 + 6];
+    float kp4_y       = filterKpss[n * 10 + 7];
+    float kp5_x       = filterKpss[n * 10 + 8];
+    float kp5_y       = filterKpss[n * 10 + 9];
+
+    float x1       = filterBoxes[n * 4 + 0];
+    float y1       = filterBoxes[n * 4 + 1];
+    float x2       = x1 + filterBoxes[n * 4 + 2];
+    float y2       = y1 + filterBoxes[n * 4 + 3];
+    int   id       = classId[n];
+    float obj_conf = objProbs[i];
+
+    group->results[last_count].kps.kp1_x   = (int)(clamp(kp1_x, 0, model_in_w) / scale_w);
+    group->results[last_count].kps.kp1_y   = (int)(clamp(kp1_y, 0, model_in_h) / scale_h);
+    group->results[last_count].kps.kp2_x   = (int)(clamp(kp2_x, 0, model_in_w) / scale_w);
+    group->results[last_count].kps.kp2_y   = (int)(clamp(kp2_y, 0, model_in_h) / scale_h);
+    group->results[last_count].kps.kp3_x   = (int)(clamp(kp3_x, 0, model_in_w) / scale_w);
+    group->results[last_count].kps.kp3_y   = (int)(clamp(kp3_y, 0, model_in_h) / scale_h);
+    group->results[last_count].kps.kp4_x   = (int)(clamp(kp4_x, 0, model_in_w) / scale_w);
+    group->results[last_count].kps.kp4_y   = (int)(clamp(kp4_y, 0, model_in_h) / scale_h);
+    group->results[last_count].kps.kp5_x   = (int)(clamp(kp5_x, 0, model_in_w) / scale_w);
+    group->results[last_count].kps.kp5_y   = (int)(clamp(kp5_y, 0, model_in_h) / scale_h);
+
+    group->results[last_count].box.left   = (int)(clamp(x1, 0, model_in_w) / scale_w);
+    group->results[last_count].box.top    = (int)(clamp(y1, 0, model_in_h) / scale_h);
+    group->results[last_count].box.right  = (int)(clamp(x2, 0, model_in_w) / scale_w);
+    group->results[last_count].box.bottom = (int)(clamp(y2, 0, model_in_h) / scale_h);
+    group->results[last_count].prop       = obj_conf;
+    char* label                           = labels[id];
+    strncpy(group->results[last_count].name, label, OBJ_NAME_MAX_SIZE);
+
+    // printf("result %2d: (%4d, %4d, %4d, %4d), %s\n", i, group->results[last_count].box.left,
+    // group->results[last_count].box.top,
+    //        group->results[last_count].box.right, group->results[last_count].box.bottom, label);
+    last_count++;
+  }
+  group->count = last_count;
+
+  return 0;
+}
+
+int post_process_acfree_mp_head(int8_t* input0, int8_t* input1, int8_t* input2, int8_t* input3, int8_t* input4, int8_t* input5, int model_in_h, int model_in_w, float conf_threshold,
+                 float nms_threshold, float scale_w, float scale_h, std::vector<int32_t>& qnt_zps,
+                 std::vector<float>& qnt_scales, detect_result_group_t* group)
+{
+  static int init = -1;
+  if (init == -1) {
+    int ret = 0;
+    ret     = loadLabelName(LABEL_NALE_TXT_PATH, labels);
+    if (ret < 0) {
+      return -1;
+    }
+
+    init = 0;
+  }
+  memset(group, 0, sizeof(detect_result_group_t));
+
+  std::vector<float> filterBoxes;
+  std::vector<float> objProbs;
+  std::vector<int>   classId;
+
+  // stride 8
+  int stride0     = 8;
+  int grid_h0     = model_in_h / stride0;
+  int grid_w0     = model_in_w / stride0;
+  int validCount0 = 0;
+  validCount0 = process_acfree_head(input0, input3, grid_h0, grid_w0, model_in_h, model_in_w, stride0, filterBoxes, objProbs,
+                        classId, conf_threshold, qnt_zps[0], qnt_scales[0], qnt_zps[3], qnt_scales[3]);
+
+  // stride 16
+  int stride1     = 16;
+  int grid_h1     = model_in_h / stride1;
+  int grid_w1     = model_in_w / stride1;
+  int validCount1 = 0;
+  validCount1 = process_acfree_head(input1, input4, grid_h1, grid_w1, model_in_h, model_in_w, stride1, filterBoxes, objProbs,
+                        classId, conf_threshold, qnt_zps[1], qnt_scales[1], qnt_zps[4], qnt_scales[4]);
+
+  // stride 32
+  int stride2     = 32;
+  int grid_h2     = model_in_h / stride2;
+  int grid_w2     = model_in_w / stride2;
+  int validCount2 = 0;
+  validCount2 = process_acfree_head(input2, input5, grid_h2, grid_w2, model_in_h, model_in_w, stride2, filterBoxes, objProbs,
                         classId, conf_threshold, qnt_zps[2], qnt_scales[2], qnt_zps[5], qnt_scales[5]);
 
   int validCount = validCount0 + validCount1 + validCount2;
