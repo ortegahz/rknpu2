@@ -5,8 +5,9 @@
 #include <vector>
 
 #define OBJ_NAME_MAX_SIZE 16
-#define OBJ_NUMB_MAX_SIZE 64
+#define OBJ_NUMB_MAX_SIZE 512
 #define OBJ_CLASS_NUM     1
+#define OBJ_CLASS_NUM_BHV     4
 #define NMS_THRESH        0.45
 #define BOX_THRESH        0.4
 #define PROP_BOX_SIZE     (5+OBJ_CLASS_NUM)
@@ -53,6 +54,10 @@ int post_process_acfree_mp_face(int8_t* input0, int8_t* input1, int8_t* input2, 
                  std::vector<float>& qnt_scales, detect_result_group_t* group);
 
 int post_process_acfree_mp_head(int8_t* input0, int8_t* input1, int8_t* input2, int8_t* input3, int8_t* input4, int8_t* input5, int model_in_h, int model_in_w, float conf_threshold,
+                 float nms_threshold, float scale_w, float scale_h, std::vector<int32_t>& qnt_zps,
+                 std::vector<float>& qnt_scales, detect_result_group_t* group);
+
+int post_process_acfree_mp_bhv(int8_t* input0, int8_t* input1, int8_t* input2, int8_t* input3, int8_t* input4, int8_t* input5, int model_in_h, int model_in_w, float conf_threshold,
                  float nms_threshold, float scale_w, float scale_h, std::vector<int32_t>& qnt_zps,
                  std::vector<float>& qnt_scales, detect_result_group_t* group);
 

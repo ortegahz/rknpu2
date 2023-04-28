@@ -273,6 +273,7 @@ int main(int argc, char** argv)
 
   detect_result_group_t detect_result_group;
   detect_result_group_t detect_result_group_face;
+  detect_result_group_t detect_result_group_bhv;
   std::vector<float>    out_scales;
   std::vector<int32_t>  out_zps;
   for (int i = 0; i < io_num.n_output; ++i) {
@@ -284,14 +285,15 @@ int main(int argc, char** argv)
   // post_process_acfree((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, (int8_t*)outputs[3].buf, (int8_t*)outputs[4].buf, (int8_t*)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
   post_process_acfree_mp_head((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, (int8_t*)outputs[3].buf, (int8_t*)outputs[4].buf, (int8_t*)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
   post_process_acfree_mp_face((int8_t*)outputs[6].buf, (int8_t*)outputs[7].buf, (int8_t*)outputs[8].buf, (int8_t*)outputs[9].buf, (int8_t*)outputs[10].buf, (int8_t*)outputs[11].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group_face);
+  post_process_acfree_mp_bhv((int8_t*)outputs[12].buf, (int8_t*)outputs[13].buf, (int8_t*)outputs[14].buf, (int8_t*)outputs[15].buf, (int8_t*)outputs[16].buf, (int8_t*)outputs[17].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group_bhv);
 
   // Draw Objects
   char text[256];
   for (int i = 0; i < detect_result_group.count; i++) {
     detect_result_t* det_result = &(detect_result_group.results[i]);
     sprintf(text, "%s %.1f%%", det_result->name, det_result->prop * 100);
-    printf("%s @ (%d %d %d %d) %f\n", det_result->name, det_result->box.left, det_result->box.top,
-           det_result->box.right, det_result->box.bottom, det_result->prop);
+    // printf("%s @ (%d %d %d %d) %f\n", det_result->name, det_result->box.left, det_result->box.top,
+    //        det_result->box.right, det_result->box.bottom, det_result->prop);
     int x1 = det_result->box.left;
     int y1 = det_result->box.top;
     int x2 = det_result->box.right;
@@ -300,11 +302,25 @@ int main(int argc, char** argv)
     // putText(orig_img, text, cv::Point(x1, y1 + 12), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0));
   }
 
-  for (int i = 0; i < detect_result_group_face.count; i++) {
-    detect_result_t* det_result = &(detect_result_group_face.results[i]);
+  // Draw bhv Objects
+  for (int i = 0; i < detect_result_group_bhv.count; i++) {
+    detect_result_t* det_result = &(detect_result_group_bhv.results[i]);
     sprintf(text, "%s %.1f%%", det_result->name, det_result->prop * 100);
     printf("%s @ (%d %d %d %d) %f\n", det_result->name, det_result->box.left, det_result->box.top,
            det_result->box.right, det_result->box.bottom, det_result->prop);
+    int x1 = det_result->box.left;
+    int y1 = det_result->box.top;
+    int x2 = det_result->box.right;
+    int y2 = det_result->box.bottom;
+    rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 255, 0, 255), 1);
+    putText(orig_img, text, cv::Point(x1, y1 + 12), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0, 255));
+  }
+
+  for (int i = 0; i < detect_result_group_face.count; i++) {
+    detect_result_t* det_result = &(detect_result_group_face.results[i]);
+    sprintf(text, "%s %.1f%%", det_result->name, det_result->prop * 100);
+    // printf("%s @ (%d %d %d %d) %f\n", det_result->name, det_result->box.left, det_result->box.top,
+    //        det_result->box.right, det_result->box.bottom, det_result->prop);
     int x1 = det_result->box.left;
     int y1 = det_result->box.top;
     int x2 = det_result->box.right;
@@ -344,6 +360,7 @@ int main(int argc, char** argv)
   // post_process_acfree((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, (int8_t*)outputs[3].buf, (int8_t*)outputs[4].buf, (int8_t*)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
   post_process_acfree_mp_head((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, (int8_t*)outputs[3].buf, (int8_t*)outputs[4].buf, (int8_t*)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
   post_process_acfree_mp_face((int8_t*)outputs[6].buf, (int8_t*)outputs[7].buf, (int8_t*)outputs[8].buf, (int8_t*)outputs[9].buf, (int8_t*)outputs[10].buf, (int8_t*)outputs[11].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group_face);
+  post_process_acfree_mp_bhv((int8_t*)outputs[12].buf, (int8_t*)outputs[13].buf, (int8_t*)outputs[14].buf, (int8_t*)outputs[15].buf, (int8_t*)outputs[16].buf, (int8_t*)outputs[17].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group_bhv);
 #endif
     ret = rknn_outputs_release(ctx, io_num.n_output, outputs);
   }
