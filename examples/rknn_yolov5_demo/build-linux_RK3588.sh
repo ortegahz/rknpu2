@@ -22,10 +22,10 @@ fi
 
 cd ${BUILD_DIR}
 cmake ../.. -DCMAKE_SYSTEM_NAME=Linux -DTARGET_SOC=${TARGET_SOC} -DCMAKE_BUILD_TYPE=Release
-make -j4
+make -j32
 make install
 cd -
 
-cp ./install /home/manu/nfs/tmp -rvf
+cp ./install /home/manu/nfs/rk3588 -rvf
 # cp /media/manu/kingstop/workspace/rknn-toolkit2/examples/onnx/yolov5/yolov5s.rknn /home/manu/nfs/tmp/install/rknn_yolov5_demo_Linux/model/RK3588 -rvf
 # cp /media/manu/kingstop/workspace/rknn-toolkit2/examples/onnx/yolov7/yolov7.rknn /home/manu/nfs/tmp/install/rknn_yolov5_demo_Linux/model/RK3588 -rvf
