@@ -106,7 +106,8 @@ static int saveFloat(const char* file_name, float* output, int element_size)
 static int kps()
 {
   int status = 0;
-  char *model_name = NULL;
+  const char *model_name = "./model/RK3588/iter-96000.rknn";
+  const  char *image_name = "./model/kps.bmp";
   rknn_context ctx;
   size_t actual_size = 0;
   int img_width = 0;
@@ -128,9 +129,6 @@ static int kps()
   memset(&dst, 0, sizeof(dst));
 
   printf("post process config: box_conf_threshold = %.2f, nms_threshold = %.2f\n", box_conf_threshold, nms_threshold);
-
-  model_name = "./model/RK3588/iter-96000.rknn";
-  char *image_name = "./model/kps.bmp";
 
   printf("Read %s ...\n", image_name);
   cv::Mat orig_img = cv::imread(image_name, 1);
@@ -278,7 +276,7 @@ static int kps()
   stBoxRect.top = 231.12;
   stBoxRect.right = stBoxRect.left + 270.17;
   stBoxRect.bottom = stBoxRect.top + 403.95;
-  post_process_kps_wrapper(ctx, &img, stBoxRect, resize_buf, output_attrs, &kps_result_group, true);
+  post_process_kps_wrapper(ctx, &img, stBoxRect, resize_buf, output_attrs, &kps_result_group, false);
 
 //   // post process
 //   float scale_w = (float)width / img_width;
