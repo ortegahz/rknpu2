@@ -39,6 +39,35 @@ const int anchor2[6] = {142, 110, 192, 243, 459, 401};
 
 inline static int clamp(float val, int min, int max) { return val > min ? (val < max ? val : max) : min; }
 
+float __f16_to_f32_s(uint16_t f16)
+{
+  uint16_t in = f16;
+
+  int32_t t1;
+  int32_t t2;
+  int32_t t3;
+  uint32_t t4;
+  float out;
+
+  t1 = in & 0x7fff;         // Non-sign bits
+  t2 = in & 0x8000;         // Sign bit
+  t3 = in & 0x7c00;         // Exponent
+
+  t1 <<= 13;                // Align mantissa on MSB
+  t2 <<= 16;                // Shift sign bit into position
+
+  t1 += 0x38000000;         // Adjust bias
+
+  t1 = (t3 == 0 ? 0 : t1);  // Denormals-as-zero
+
+  t1 |= t2;                 // Re-insert sign bit
+
+  *((uint32_t*)&out) = t1;
+
+  return out;
+
+}
+
 char* readLine(FILE* fp, char* buffer, int* len)
 {
   int    ch;
@@ -294,6 +323,299 @@ static int process(int8_t* input, int* anchor, int grid_h, int grid_w, int heigh
     }
   }
   return validCount;
+}
+
+template<typename t>
+int post_process_kps(t *ptInput, std::vector<uint32_t> &qnt_zps, std::vector<float> &qnt_scales, float fCenterX, float fCenterY, float fScaleWT, float fScaleHT, kps_result_group_t *group)
+{
+  int iGridLen = KPS_OUTPUT_SHAPE_H * KPS_OUTPUT_SHAPE_W;
+  for (int i = 0; i < KPS_KEYPOINT_NUM; i++)
+  {
+    cv::Mat featureMap = cv::Mat::zeros(KPS_OUTPUT_SHAPE_H + 2 * KPS_PIXEL_BORDER, KPS_OUTPUT_SHAPE_W + 2 * KPS_PIXEL_BORDER, CV_32F);
+    cv::Mat featureMapFiltered;
+    for (int j = 0; j < KPS_OUTPUT_SHAPE_H; j++)
+    {
+      for (int k = 0; k < KPS_OUTPUT_SHAPE_W; k++)
+      {
+        float fValue;
+        int iOffset = i * iGridLen + j * KPS_OUTPUT_SHAPE_W + k;
+        t tValue = ptInput[iOffset];
+        printf("std::is_same<t, uint16_t>::value --> %d \n", std::is_same<t, uint16_t>::value);
+        printf("std::is_same<t, uint8_t>::value --> %d \n", std::is_same<t, uint8_t>::value);
+        if (std::is_same<t, uint16_t>::value) {
+          fValue = __f16_to_f32_s(tValue);
+        }
+        else if (std::is_same<t, uint8_t>::value) {
+          fValue = deqnt_affine_to_f32(tValue, qnt_zps[0], qnt_scales[0]);
+        }
+        else {
+          printf("unsupported template type !!! \n");
+          exit(1);
+        }
+
+        featureMap.at<float>(j + KPS_PIXEL_BORDER, k + KPS_PIXEL_BORDER) = fValue;
+      }
+    }
+
+    cv::GaussianBlur(featureMap, featureMapFiltered, cv::Size(KPS_GAUSSIAN_KERNEL, KPS_GAUSSIAN_KERNEL), 0);
+    char pcPathSave[512];
+    sprintf(pcPathSave, "./rknn_output_featureMap_%d.txt", i);
+    FILE *pFileHandle = fopen(pcPathSave, "w");
+    for (int j = 0; j < featureMapFiltered.rows; j++)
+    {
+      for (int k = 0; k < featureMapFiltered.cols; k++)
+      {
+        fprintf(pFileHandle, "%f\n", featureMapFiltered.at<float>(j, k));
+      }
+    }
+    fclose(pFileHandle);
+
+    float fMax = FLT_MIN, fSecondMax = FLT_MIN;
+    int iMaxUnpadPosX = -1, iMaxUnpadPosY = -1, iSecondMaxUnpadPosX = -1, iSecondMaxUnpadPosY = -1;
+    float fDistance = -1.0, fDeltaX = -1., fDeltaY = -1., fMaxUnpadPosX = -1., fMaxUnpadPosY = -1.;
+    for (int j = 0; j < featureMapFiltered.rows; j++)
+    {
+      for (int k = 0; k < featureMapFiltered.cols; k++)
+      {
+        float fValue = featureMapFiltered.at<float>(j, k);
+        if (fValue > fMax)
+        {
+          fMax = fValue;
+          iMaxUnpadPosX = k - KPS_PIXEL_BORDER;
+          iMaxUnpadPosY = j - KPS_PIXEL_BORDER;
+        }
+      }
+    }
+    featureMapFiltered.at<float>(iMaxUnpadPosY + KPS_PIXEL_BORDER, iMaxUnpadPosX + KPS_PIXEL_BORDER) = 0.;
+    for (int j = 0; j < featureMapFiltered.rows; j++)
+    {
+      for (int k = 0; k < featureMapFiltered.cols; k++)
+      {
+        float fValue = featureMapFiltered.at<float>(j, k);
+        if (fValue > fSecondMax)
+        {
+          fSecondMax = fValue;
+          iSecondMaxUnpadPosX = k - KPS_PIXEL_BORDER;
+          iSecondMaxUnpadPosY = j - KPS_PIXEL_BORDER;
+        }
+      }
+    }
+    // printf("featureMapFiltered.at<float>(21, 39) --> %f \n", featureMapFiltered.at<float>(21, 39));
+    // printf("[i] iMaxUnpadPosX, iMaxUnpadPosY, iSecondMaxUnpadPosX, fMax iSecondMaxUnpadPosY fSecondMax --> %d, %d, %d, %f, %d, %d %f \n", i, iMaxUnpadPosX, iMaxUnpadPosY, fMax, iSecondMaxUnpadPosX + KPS_PIXEL_BORDER, iSecondMaxUnpadPosY + KPS_PIXEL_BORDER, fSecondMax);
+    fDeltaX = (float)(iSecondMaxUnpadPosX - iMaxUnpadPosX);
+    fDeltaY = (float)(iSecondMaxUnpadPosY - iMaxUnpadPosY);
+    fDistance = sqrt(pow(fDeltaX, 2) + pow(fDeltaY, 2));
+    // printf("[i] iMaxUnpadPosX, iMaxUnpadPosY, fDistance --> %d, %d, %d, %f \n", i, iMaxUnpadPosX, iMaxUnpadPosY, fDistance);
+    if (fDistance > 1e-3)
+    {
+      fMaxUnpadPosX = KPS_SHIFTS * fDeltaX / fDistance + (float)iMaxUnpadPosX;
+      fMaxUnpadPosY = KPS_SHIFTS * fDeltaY / fDistance + (float)iMaxUnpadPosY;
+    }
+    // printf("[i] fMaxUnpadPosX, fMaxUnpadPosY, fDistance --> %d, %f, %f, %f \n", i, fMaxUnpadPosX, fMaxUnpadPosY, fDistance);
+    fMaxUnpadPosX = std::max((float)0., std::min(fMaxUnpadPosX, (float)(KPS_OUTPUT_SHAPE_W - 1)));
+    fMaxUnpadPosY = std::max((float)0., std::min(fMaxUnpadPosY, (float)(KPS_OUTPUT_SHAPE_H - 1)));
+
+    float fConf;
+    if (std::is_same<t, uint16_t>::value) {
+      float fConf = __f16_to_f32_s(ptInput[i * iGridLen + int(round(fMaxUnpadPosY) + 1e-9) * KPS_OUTPUT_SHAPE_W + int(round(fMaxUnpadPosX) + 1e-9)]) / 255. + 0.5;
+    }
+    else if (std::is_same<t, uint8_t>::value) {
+      fConf = deqnt_affine_to_f32(ptInput[i * iGridLen + int(round(fMaxUnpadPosY) + 1e-9) * KPS_OUTPUT_SHAPE_W + int(round(fMaxUnpadPosX) + 1e-9)], qnt_zps[0], qnt_scales[0]) / 255. + 0.5;
+    }
+    else {
+      printf("unsupported template type !!! \n");
+      exit(1);
+    }
+
+    fMaxUnpadPosX = fMaxUnpadPosX * KPS_STRIDE + 2;
+    fMaxUnpadPosY = fMaxUnpadPosY * KPS_STRIDE + 2;
+
+    // printf("[i] fMaxUnpadPosX, fMaxUnpadPosY, fScaleWT, fScaleHT, fCenterX, fCenterY --> %d, %f, %f, %f, %f, %f, %f \n", i, fMaxUnpadPosX, fMaxUnpadPosY, fScaleWT, fScaleHT, fCenterX, fCenterY);
+    fMaxUnpadPosX = fMaxUnpadPosX / (float)KPS_INPUT_SHAPE_W * fScaleWT + fCenterX - fScaleWT * 0.5;
+    fMaxUnpadPosY = fMaxUnpadPosY / (float)KPS_INPUT_SHAPE_H * fScaleHT + fCenterY - fScaleHT * 0.5;
+
+    // printf("[i] fMaxUnpadPosX, fMaxUnpadPosY --> %d, %f, %f \n", i, fMaxUnpadPosX, fMaxUnpadPosY);
+    // printf("[i] fConf --> %d, %f \n", i, fConf);
+
+    group->results[0].kps[i].x = fMaxUnpadPosX;
+    group->results[0].kps[i].y = fMaxUnpadPosY;
+    group->results[0].kps[i].conf = fConf;
+    group->count = 1;
+  }
+  return 0;
+}
+
+int post_process_kps_wrapper(rknn_context ctx_kps, cv::Mat *Img, pcBOX_RECT_FLOAT stBoxRect, void *resize_buf, rknn_tensor_attr *output_attrs, kps_result_group_t *pKps_result_group, bool bF16)
+{
+  // Load image
+  // CImg<unsigned char> img_kps("./model/rsn_align.bmp");
+  unsigned char *input_data = NULL;
+  // input_data = load_image("./model/rsn_align.bmp", &img_height_kps, &img_width_kps, &img_channel_kps, &input_attrs[0]);
+  // if (!input_data)
+  // {
+  //   return -1;
+  // }
+
+  float fCenterX = (stBoxRect.left + stBoxRect.right) / 2.;
+  float fCenterY = (stBoxRect.top + stBoxRect.bottom) / 2.;
+  float fScaleW = (stBoxRect.right - stBoxRect.left) * 1.0 / KPS_PIXEL_STD;
+  float fScaleH = (stBoxRect.bottom - stBoxRect.top) * 1.0 / KPS_PIXEL_STD;
+  fScaleW *= (1. + KPS_X_EXTENTION);
+  fScaleH *= (1. + KPS_Y_EXTENTION);
+  // printf("fScaleW, fScaleH --> %f, %f \n", fScaleW, fScaleH);
+  // printf("KPS_INPUT_SHAPE_W / KPS_INPUT_SHAPE_H  * fScaleH -- > %f \n", (KPS_INPUT_SHAPE_W / KPS_INPUT_SHAPE_H  * fScaleH));
+  if (fScaleW > KPS_WIDTH_HEIGHT_RATIO * fScaleH)
+  {
+    printf("true \n");
+    fScaleH = fScaleW * 1.0 / KPS_WIDTH_HEIGHT_RATIO;
+  }
+  else
+  {
+    printf("false \n");
+    fScaleW = fScaleH * 1.0 * KPS_WIDTH_HEIGHT_RATIO;
+  }
+  printf("fScaleW, fScaleH --> %f, %f \n", fScaleW, fScaleH);
+  float fScaleWT = fScaleW * KPS_PIXEL_STD;
+  float fScaleHT = fScaleH * KPS_PIXEL_STD;
+  float fSrcW = fScaleWT;
+  float fDstW = KPS_INPUT_SHAPE_W;
+  float fDstH = KPS_INPUT_SHAPE_H;
+
+  cv::Point2f srcTri[3];
+  cv::Point2f dstTri[3];
+  srcTri[0] = cv::Point2f(fCenterX, fCenterY);
+  srcTri[1] = cv::Point2f(fCenterX, fCenterY - fSrcW * 0.5);
+  srcTri[2] = cv::Point2f(fCenterX - fSrcW * 0.5, fCenterY - fSrcW * 0.5);
+  dstTri[0] = cv::Point2f(fDstW * 0.5, fDstH * 0.5);
+  dstTri[1] = cv::Point2f(fDstW * 0.5, fDstH * 0.5 - fDstW * 0.5);
+  dstTri[2] = cv::Point2f(fDstW * 0.5 - fDstW * 0.5, fDstH * 0.5 - fDstW * 0.5);
+  printf("srcTri[0] --> %f, %f \n", fCenterX, fCenterY);
+  printf("srcTri[1] --> %f, %f \n", fCenterX, fCenterY - fSrcW * 0.5);
+  printf("srcTri[2] --> %f, %f \n", fCenterX - fSrcW * 0.5, fCenterY - fSrcW * 0.5);
+  printf("dstTri[0] --> %f, %f \n", fDstW * 0.5, fDstH * 0.5);
+  printf("dstTri[1] --> %f, %f \n", fDstW * 0.5, fDstH * 0.5 - fDstW * 0.5);
+  printf("dstTri[2] --> %f, %f \n", fDstW * 0.5 - fDstW * 0.5, fDstH * 0.5 - fDstW * 0.5);
+  cv::Mat Trans(2, 3, CV_32FC1);
+  Trans = cv::getAffineTransform(srcTri, dstTri);
+
+  // cv::Mat img = cv::imread("./model/rsn_align.bmp");
+  // cv::Mat Img = cv::imread("./model/rsn.bmp");
+  cv::Mat ImgWA;
+  cv::warpAffine(*Img, ImgWA, Trans, cv::Size(KPS_INPUT_SHAPE_W, KPS_INPUT_SHAPE_H));
+  cv::imwrite("./ImgWA.bmp", ImgWA);
+  input_data = ImgWA.data;
+
+  // save data
+  char acSavePath[512];
+  sprintf(acSavePath, "./rknn_output_input_data.txt");
+  FILE *pFileHandle = fopen(acSavePath, "w");
+  for (int i = 0; i < KPS_INPUT_SHAPE_H; i++)
+  {
+    for (int j = 0; j < KPS_INPUT_SHAPE_W; j++)
+    {
+      for (int k = 0; k < 3; k++)
+      {
+        fprintf(pFileHandle, "%u\n", input_data[i * KPS_INPUT_SHAPE_W * 3 + j * 3 + k]);
+      }
+    }
+  }
+  fclose(pFileHandle);
+
+  rknn_input inputs[1];
+  memset(inputs, 0, sizeof(inputs));
+  inputs[0].index = 0;
+  inputs[0].type = RKNN_TENSOR_UINT8;
+  inputs[0].size = KPS_INPUT_SHAPE_H * KPS_INPUT_SHAPE_W * 3;
+  inputs[0].fmt = RKNN_TENSOR_NHWC;
+  inputs[0].pass_through = 0;
+
+  memcpy(resize_buf, input_data, KPS_INPUT_SHAPE_H * KPS_INPUT_SHAPE_W * 3);
+
+  inputs[0].buf = resize_buf;
+  rknn_inputs_set(ctx_kps, 1, inputs);
+
+  rknn_output outputs[1];
+  memset(outputs, 0, sizeof(outputs));
+  for (int i = 0; i < 1; i++)
+  {
+    outputs[i].want_float = 0;
+  }
+
+  int ret = rknn_run(ctx_kps, NULL);
+  ret = rknn_outputs_get(ctx_kps, 1, outputs, NULL);
+
+  std::vector<float> out_scales;
+  std::vector<uint32_t> out_zps;
+  for (int i = 0; i < 1; ++i)
+  {
+    out_scales.push_back(output_attrs[i].scale);
+    out_zps.push_back(output_attrs[i].zp);
+  }
+
+  // save float outputs for debugging
+  if (bF16) {
+    for (int i = 0; i < 1; ++i)
+    {
+      char path[512];
+      sprintf(path, "./rknn_output_real_kps_nq_%d.txt", i);
+      FILE *fp = fopen(path, "w");
+      uint16_t *output = (uint16_t *)outputs[i].buf;
+      uint32_t n_elems = output_attrs[i].n_elems;
+      for (int j = 0; j < n_elems; j++)
+      {
+        float value = __f16_to_f32_s(output[j]);
+        fprintf(fp, "%f\n", value);
+      }
+      fclose(fp);
+    }
+  }
+  else {
+    for (int i = 0; i < 1; ++i)
+    {
+      char path[512];
+      sprintf(path, "./rknn_output_real_kps_%d.txt", i);
+      FILE *fp = fopen(path, "w");
+      uint8_t *output = (uint8_t *)outputs[i].buf;
+      float out_scale = output_attrs[i].scale;
+      uint32_t out_zp = output_attrs[i].zp;
+      uint32_t n_elems = output_attrs[i].n_elems;
+      // printf("output idx %d n_elems --> %d \n", i, n_elems);
+      for (int j = 0; j < n_elems; j++)
+      {
+        float value = deqnt_affine_to_f32(output[j], out_zp, out_scale);
+        fprintf(fp, "%f\n", value);
+      }
+      fclose(fp);
+    }
+  }
+
+  // post_process_acfree((uint8_t*)outputs[0].buf, (uint8_t*)outputs[1].buf, (uint8_t*)outputs[2].buf, (uint8_t*)outputs[3].buf, (uint8_t*)outputs[4].buf, (uint8_t*)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+  // post_process_kps_f16((uint8_t*)outputs[0].buf, fCenterX, fCenterY, fScaleWT, fScaleHT, pKps_result_group);
+  if (bF16) {
+    post_process_kps((uint16_t *)outputs[0].buf, out_zps, out_scales, fCenterX, fCenterY, fScaleWT, fScaleHT, pKps_result_group);
+  }
+  else {
+    post_process_kps((uint8_t *)outputs[0].buf, out_zps, out_scales, fCenterX, fCenterY, fScaleWT, fScaleHT, pKps_result_group);
+  }
+
+  // Save KPS Parser Results
+  FILE *fid = fopen("npu_parser_results_kps.txt", "w");
+  assert(fid != NULL);
+  for (int i = 0; i < pKps_result_group->count; i++)
+  {
+    kps_result_t *kps_result = &(pKps_result_group->results[i]);
+    for (int j = 0; j < KPS_KEYPOINT_NUM; j++)
+    {
+      float x = (float)kps_result->kps[j].x;
+      float y = (float)kps_result->kps[j].y;
+      float conf = kps_result->kps[j].conf;
+      fprintf(fid, "%f, %f,  %f \n", x, y, conf);
+      // fprintf(fid, "%f, %f \n", x, y);
+    }
+  }
+  fclose(fid);
+
+  return 0;
 }
 
 int post_process_acfree(int8_t* input0, int8_t* input1, int8_t* input2, int8_t* input3, int8_t* input4, int8_t* input5, int model_in_h, int model_in_w, float conf_threshold,

@@ -3,7 +3,8 @@ cd /media/manu/kingstop/workspace/rknpu2/examples/rknn_yolov5_demo
 ./build-linux_RK3588.sh
 
 # run
-busybox mount -t nfs 192.168.1.128:/home/manu/nfs /mnt_manu -o nolock && cd /mnt_manu/tmp/install/rknn_yolov5_demo_Linux
+ssh root@192.168.1.158
+busybox mount -t nfs 192.168.1.82:/home/manu/nfs /mnt_manu -o nolock && cd /mnt_manu/rk3588/install/rknn_yolov5_demo_Linux
 
 ./rknn_yolov5_demo ./model/RK3588/yolov5s-640-640.rknn ./model/bus.jpg
 ./rknn_yolov5_demo ./model/RK3588/yolov5s.rknn ./model/bus.jpg
@@ -14,5 +15,5 @@ busybox mount -t nfs 192.168.1.128:/home/manu/nfs /mnt_manu -o nolock && cd /mnt
 ./rknn_yolov5_demo ./model/RK3588/acfree_head_1280.rknn ./model/sylgd_rp.bmp
 
 # debug
-gdbserver 192.168.1.128:8005 ./rknn_yolov5_demo ./model/RK3588/yolov7.rknn ./model/bus.jpg
-gdbserver 192.168.1.128:8005 ./rknn_yolov5_demo ./model/RK3588/acfree.rknn ./model/bus.jpg
+gdbserver 192.168.1.82:8005 ./rknn_yolov5_demo ./model/RK3588/yolov7.rknn ./model/bus.jpg
+gdbserver 192.168.1.82:8005 ./rknn_yolov5_demo ./model/RK3588/acfree.rknn ./model/bus.jpg
