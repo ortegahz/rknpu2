@@ -588,6 +588,8 @@ int main(int argc, char **argv)
   }
 #endif
 
+  return 0;
+
   // post_process((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, height, width,
   //              box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
   post_process_acfree((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, (int8_t *)outputs[3].buf, (int8_t *)outputs[4].buf, (int8_t *)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
