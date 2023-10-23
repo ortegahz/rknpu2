@@ -6,3 +6,5 @@ examples/rknn_yolov5_demo/install/rknn_yolov5_demo_Linux/lib/
 examples/rknn_yolov5_demo/install/rknn_yolov5_demo_Linux/model/
 
 examples/rknn_yolov5_demo/install/rknn_yolov5_demo_Linux/rknn_yolov5_demo
+
+\.vscode/

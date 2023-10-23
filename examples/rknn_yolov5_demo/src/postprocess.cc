@@ -448,19 +448,34 @@ int post_process_kps(t *ptInput, std::vector<uint32_t> &qnt_zps, std::vector<flo
   return 0;
 }
 
-static int process_player_6(uint16_t* input, uint16_t* poi, int grid_h, int grid_w, int height, int width, int stride,
-                   std::vector<float>& boxes, std::vector<float>& objProbs, std::vector<float>& pois, std::vector<int>& classId, float threshold)
+template<typename t>
+static int process_player_6(t* input, t* poi, int grid_h, int grid_w, int height, int width, int stride,
+                   std::vector<float>& boxes, std::vector<float>& objProbs, std::vector<float>& pois, std::vector<int>& classId, float threshold, uint32_t zp_main, float scale_main, uint32_t zp_aux, float scale_aux)
 {
   int    validCount = 0;
   int    grid_len   = grid_h * grid_w;
   float threshold_unsigmoid = unsigmoid(threshold);
+  uint8_t thres_i8_c   = qnt_f32_to_affine(threshold_unsigmoid, zp_main, scale_main);
   for (int i = 0; i < grid_h; i++) {
     for (int j = 0; j < grid_w; j++) {
           int     offset_c = 0 * grid_len + i * grid_w + j;
           // uint8_t box_confidence = input[(PROP_BOX_SIZE * a + 4) * grid_len + i * grid_w + j];
-          uint16_t* in_ptr_c = input + offset_c;
-          uint16_t maxClassProbs = in_ptr_c[0];
-          float maxClassProbs_float = __f16_to_f32_s(maxClassProbs);
+          t* in_ptr_c = input + offset_c;
+          t maxClassProbs = in_ptr_c[0];
+          float maxClassProbs_float;
+          // float maxClassProbs_float = __f16_to_f32_s(maxClassProbs);
+          if (std::is_same<t, uint16_t>::value) {
+            maxClassProbs_float = __f16_to_f32_s(maxClassProbs);
+            if (maxClassProbs_float < threshold_unsigmoid) continue;
+          }
+          else if (std::is_same<t, uint8_t>::value) {
+            if (maxClassProbs < thres_i8_c) continue;
+            maxClassProbs_float = deqnt_affine_to_f32(maxClassProbs, zp_main, scale_main);
+          }
+          else {
+            printf("unsupported template type !!! \n");
+            exit(1);
+          }
           int    maxClassId    = 0;
 
           // if (i == 9 && j == 46)
@@ -468,15 +483,33 @@ static int process_player_6(uint16_t* input, uint16_t* poi, int grid_h, int grid
           //   printf("[%d %d] maxClassProbs_float --> %f <%d>\n", grid_h, grid_w, maxClassProbs_float, maxClassProbs);
           // }
 
-          if (maxClassProbs_float < threshold_unsigmoid) continue;
+          // if (maxClassProbs_float < threshold_unsigmoid) continue;
 
           int     offset_b = 1 * grid_len + i * grid_w + j;
-          uint16_t* in_ptr_b = input + offset_b;
+          t* in_ptr_b = input + offset_b;
 
-          float   box_l  = __f16_to_f32_s(*in_ptr_b);
-          float   box_t  = __f16_to_f32_s(in_ptr_b[grid_len]);
-          float   box_r  = __f16_to_f32_s(in_ptr_b[2 * grid_len]);
-          float   box_b  = __f16_to_f32_s(in_ptr_b[3 * grid_len]);
+          // float   box_l  = __f16_to_f32_s(*in_ptr_b);
+          // float   box_t  = __f16_to_f32_s(in_ptr_b[grid_len]);
+          // float   box_r  = __f16_to_f32_s(in_ptr_b[2 * grid_len]);
+          // float   box_b  = __f16_to_f32_s(in_ptr_b[3 * grid_len]);
+          float   box_l,box_t,box_r,box_b;
+          if (std::is_same<t, uint16_t>::value) {
+            box_l  = __f16_to_f32_s(*in_ptr_b);
+            box_t  = __f16_to_f32_s(in_ptr_b[grid_len]);
+            box_r  = __f16_to_f32_s(in_ptr_b[2 * grid_len]);
+            box_b  = __f16_to_f32_s(in_ptr_b[3 * grid_len]);
+          }
+          else if (std::is_same<t, uint8_t>::value) {
+            box_l  = deqnt_affine_to_f32(*in_ptr_b, zp_main, scale_main);
+            box_t  = deqnt_affine_to_f32(in_ptr_b[grid_len], zp_main, scale_main);
+            box_r  = deqnt_affine_to_f32(in_ptr_b[2 * grid_len], zp_main, scale_main);
+            box_b  = deqnt_affine_to_f32(in_ptr_b[3 * grid_len], zp_main, scale_main);
+          }
+          else {
+            printf("unsupported template type !!! \n");
+            exit(1);
+          }
+
           float box_x1 = j - box_l + 0.5;
           float box_y1 = i - box_t + 0.5;
           float box_x2 = j + box_r + 0.5;
@@ -507,8 +540,19 @@ static int process_player_6(uint16_t* input, uint16_t* poi, int grid_h, int grid
               {
                 int sx = p2 + px; int sy =  py + p1;
                 int  offset_p = idx_base + sy * sp + sx;
-                uint16_t* in_ptr_p = poi + offset_p;
-                float value = __f16_to_f32_s(in_ptr_p[0]);
+                t* in_ptr_p = poi + offset_p;
+                // float value = __f16_to_f32_s(in_ptr_p[0]);
+                float value;
+                if (std::is_same<t, uint16_t>::value) {
+                  value = __f16_to_f32_s(in_ptr_p[0]);
+                }
+                else if (std::is_same<t, uint8_t>::value) {
+                  value = qnt_f32_to_affine(in_ptr_p[0], zp_aux, scale_aux);
+                }
+                else {
+                  printf("unsupported template type !!! \n");
+                  exit(1);
+                }
                 // if (i == 46 && j == 54)
                 // {
                 //   printf("sx --> %d and sy --> %d\n", sx, sy);
@@ -553,8 +597,11 @@ static int process_player_6(uint16_t* input, uint16_t* poi, int grid_h, int grid
   return validCount;
 }
 
-int post_process_player_6(uint16_t* input0, uint16_t* input1, uint16_t* input2, uint16_t* input3, uint16_t* input4, int model_in_h, int model_in_w, float conf_threshold, float nms_threshold, float scale_w, float scale_h, detect_result_group_float_t* group)
+template<typename t>
+int post_process_player_6(t* input0, t* input1, t* input2, t* input3, t* input4, int model_in_h, int model_in_w, float conf_threshold, float nms_threshold, float scale_w, float scale_h, std::vector<int32_t>& qnt_zps, std::vector<float>& qnt_scales, detect_result_group_float_t* group)
 {
+  printf("std::is_same<t, uint16_t>::value --> %d \n", std::is_same<t, uint16_t>::value);
+  printf("std::is_same<t, uint8_t>::value --> %d \n", std::is_same<t, uint8_t>::value);
   static int init = -1;
   if (init == -1) {
     int ret = 0;
@@ -580,7 +627,7 @@ int post_process_player_6(uint16_t* input0, uint16_t* input1, uint16_t* input2, 
   int grid_w0     = model_in_w / stride0;
   int validCount0 = 0;
   validCount0 = process_player_6(input0, input4, grid_h0, grid_w0, model_in_h, model_in_w, stride0, filterBoxes, objProbs, pois,
-                        classId, conf_threshold);
+                        classId, conf_threshold, qnt_zps[0], qnt_scales[0], qnt_zps[4], qnt_scales[4]);
 
   printf("validCount0 --> %d \n", validCount0);
 
@@ -590,7 +637,7 @@ int post_process_player_6(uint16_t* input0, uint16_t* input1, uint16_t* input2, 
   int grid_w1     = model_in_w / stride1;
   int validCount1 = 0;
   validCount1 = process_player_6(input1, input4, grid_h1, grid_w1, model_in_h, model_in_w, stride1, filterBoxes, objProbs, pois,
-                        classId, conf_threshold);
+                        classId, conf_threshold, qnt_zps[1], qnt_scales[1], qnt_zps[4], qnt_scales[4]);
   
   printf("validCount1 --> %d \n", validCount1);
 
@@ -600,7 +647,7 @@ int post_process_player_6(uint16_t* input0, uint16_t* input1, uint16_t* input2, 
   int grid_w2     = model_in_w / stride2;
   int validCount2 = 0;
   validCount2 = process_player_6(input2, input4, grid_h2, grid_w2, model_in_h, model_in_w, stride2, filterBoxes, objProbs, pois,
-                        classId, conf_threshold);
+                        classId, conf_threshold, qnt_zps[2], qnt_scales[2], qnt_zps[4], qnt_scales[4]);
 
   printf("validCount2 --> %d \n", validCount2);
 
@@ -610,7 +657,7 @@ int post_process_player_6(uint16_t* input0, uint16_t* input1, uint16_t* input2, 
   int grid_w3     = model_in_w / stride3;
   int validCount3 = 0;
   validCount3 = process_player_6(input3, input4, grid_h3, grid_w3, model_in_h, model_in_w, stride3, filterBoxes, objProbs, pois,
-                        classId, conf_threshold);
+                        classId, conf_threshold, qnt_zps[3], qnt_scales[3], qnt_zps[4], qnt_scales[4]);
 
   printf("validCount3 --> %d \n", validCount3);
 
@@ -678,6 +725,10 @@ int post_process_player_6(uint16_t* input0, uint16_t* input1, uint16_t* input2, 
 
   return 0;
 }
+
+template int post_process_player_6 <uint16_t > (uint16_t* input0, uint16_t* input1, uint16_t* input2, uint16_t* input3, uint16_t* input4, int model_in_h, int model_in_w, float conf_threshold, float nms_threshold, float scale_w, float scale_h, std::vector<int32_t>& qnt_zps, std::vector<float>& qnt_scales, detect_result_group_float_t* group);
+
+template int post_process_player_6 <int8_t > (int8_t* input0, int8_t* input1, int8_t* input2, int8_t* input3, int8_t* input4, int model_in_h, int model_in_w, float conf_threshold, float nms_threshold, float scale_w, float scale_h, std::vector<int32_t>& qnt_zps, std::vector<float>& qnt_scales, detect_result_group_float_t* group);
 
 int post_process_kps_wrapper(rknn_context ctx_kps, cv::Mat *Img, pcBOX_RECT_FLOAT stBoxRect, void *resize_buf, rknn_tensor_attr *output_attrs, kps_result_group_t *pKps_result_group, bool bF16)
 {

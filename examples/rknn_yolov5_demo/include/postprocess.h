@@ -118,7 +118,8 @@ typedef struct _kps_result_group_t
     kps_result_t results[OBJ_NUMB_MAX_SIZE];
 } kps_result_group_t;
 
-int post_process_player_6(uint16_t* input0, uint16_t* input1, uint16_t* input2, uint16_t* input3, uint16_t* input4, int model_in_h, int model_in_w, float conf_threshold, float nms_threshold, float scale_w, float scale_h, detect_result_group_float_t* group);
+template<typename t>
+int post_process_player_6(t* input0, t* input1, t* input2, t* input3, t* input4, int model_in_h, int model_in_w, float conf_threshold, float nms_threshold, float scale_w, float scale_h, std::vector<int32_t>& qnt_zps, std::vector<float>& qnt_scales, detect_result_group_float_t* group);
 
 template<typename t>
 int post_process_kps(t *pt8Input, std::vector<uint32_t> &qnt_zps, std::vector<float> &qnt_scales, float fCenterX, float fCenterY, float fScaleWT, float fScaleHT, kps_result_group_t *group);
