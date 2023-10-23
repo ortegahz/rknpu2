@@ -222,7 +222,7 @@ static int8_t qnt_f32_to_affine(float f32, int32_t zp, float scale)
   return res;
 }
 
-static float deqnt_affine_to_f32(int8_t qnt, int32_t zp, float scale) { return ((float)qnt - (float)zp) * scale; }
+float deqnt_affine_to_f32(int8_t qnt, int32_t zp, float scale) { return ((float)qnt - (float)zp) * scale; }
 
 static int process_acfree(int8_t* input_c, int8_t* input_b, int grid_h, int grid_w, int height, int width, int stride,
                    std::vector<float>& boxes, std::vector<float>& objProbs, std::vector<int>& classId, float threshold,
@@ -450,12 +450,12 @@ int post_process_kps(t *ptInput, std::vector<uint32_t> &qnt_zps, std::vector<flo
 
 template<typename t>
 static int process_player_6(t* input, t* poi, int grid_h, int grid_w, int height, int width, int stride,
-                   std::vector<float>& boxes, std::vector<float>& objProbs, std::vector<float>& pois, std::vector<int>& classId, float threshold, uint32_t zp_main, float scale_main, uint32_t zp_aux, float scale_aux)
+                   std::vector<float>& boxes, std::vector<float>& objProbs, std::vector<float>& pois, std::vector<int>& classId, float threshold, int32_t zp_main, float scale_main, int32_t zp_aux, float scale_aux)
 {
   int    validCount = 0;
   int    grid_len   = grid_h * grid_w;
   float threshold_unsigmoid = unsigmoid(threshold);
-  uint8_t thres_i8_c   = qnt_f32_to_affine(threshold_unsigmoid, zp_main, scale_main);
+  int8_t thres_i8_c   = qnt_f32_to_affine(threshold_unsigmoid, zp_main, scale_main);
   for (int i = 0; i < grid_h; i++) {
     for (int j = 0; j < grid_w; j++) {
           int     offset_c = 0 * grid_len + i * grid_w + j;
@@ -468,7 +468,7 @@ static int process_player_6(t* input, t* poi, int grid_h, int grid_w, int height
             maxClassProbs_float = __f16_to_f32_s(maxClassProbs);
             if (maxClassProbs_float < threshold_unsigmoid) continue;
           }
-          else if (std::is_same<t, uint8_t>::value) {
+          else if (std::is_same<t, int8_t>::value) {
             if (maxClassProbs < thres_i8_c) continue;
             maxClassProbs_float = deqnt_affine_to_f32(maxClassProbs, zp_main, scale_main);
           }
@@ -499,7 +499,7 @@ static int process_player_6(t* input, t* poi, int grid_h, int grid_w, int height
             box_r  = __f16_to_f32_s(in_ptr_b[2 * grid_len]);
             box_b  = __f16_to_f32_s(in_ptr_b[3 * grid_len]);
           }
-          else if (std::is_same<t, uint8_t>::value) {
+          else if (std::is_same<t, int8_t>::value) {
             box_l  = deqnt_affine_to_f32(*in_ptr_b, zp_main, scale_main);
             box_t  = deqnt_affine_to_f32(in_ptr_b[grid_len], zp_main, scale_main);
             box_r  = deqnt_affine_to_f32(in_ptr_b[2 * grid_len], zp_main, scale_main);
@@ -546,8 +546,8 @@ static int process_player_6(t* input, t* poi, int grid_h, int grid_w, int height
                 if (std::is_same<t, uint16_t>::value) {
                   value = __f16_to_f32_s(in_ptr_p[0]);
                 }
-                else if (std::is_same<t, uint8_t>::value) {
-                  value = qnt_f32_to_affine(in_ptr_p[0], zp_aux, scale_aux);
+                else if (std::is_same<t, int8_t>::value) {
+                  value = deqnt_affine_to_f32(in_ptr_p[0], zp_aux, scale_aux);
                 }
                 else {
                   printf("unsupported template type !!! \n");
@@ -601,7 +601,7 @@ template<typename t>
 int post_process_player_6(t* input0, t* input1, t* input2, t* input3, t* input4, int model_in_h, int model_in_w, float conf_threshold, float nms_threshold, float scale_w, float scale_h, std::vector<int32_t>& qnt_zps, std::vector<float>& qnt_scales, detect_result_group_float_t* group)
 {
   printf("std::is_same<t, uint16_t>::value --> %d \n", std::is_same<t, uint16_t>::value);
-  printf("std::is_same<t, uint8_t>::value --> %d \n", std::is_same<t, uint8_t>::value);
+  printf("std::is_same<t, int8_t>::value --> %d \n", std::is_same<t, int8_t>::value);
   static int init = -1;
   if (init == -1) {
     int ret = 0;

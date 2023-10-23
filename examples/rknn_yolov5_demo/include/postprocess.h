@@ -17,7 +17,7 @@
 #define OBJ_NUMB_MAX_SIZE 64
 #define OBJ_CLASS_NUM     1
 #define NMS_THRESH        0.45
-#define BOX_THRESH        0.4
+#define BOX_THRESH        0.5
 #define PROP_BOX_SIZE     (5+OBJ_CLASS_NUM)
 
 #define KPS_PIXEL_STD 200
@@ -138,4 +138,5 @@ int post_process(int8_t *input0, int8_t *input1, int8_t *input2, int model_in_h,
 void deinitPostProcess();
 
 float __f16_to_f32_s(uint16_t f16);
+float deqnt_affine_to_f32(int8_t qnt, int32_t zp, float scale);
 #endif //_RKNN_ZERO_COPY_DEMO_POSTPROCESS_H_
