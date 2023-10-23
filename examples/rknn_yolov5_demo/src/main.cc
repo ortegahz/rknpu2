@@ -26,11 +26,13 @@
 #include "postprocess.h"
 
 #define PERF_WITH_POST 1
+#define IS_F16_MODEL 1
+
 /*-------------------------------------------
                   Functions
 -------------------------------------------*/
 
-static void dump_tensor_attr(rknn_tensor_attr* attr)
+static void dump_tensor_attr(rknn_tensor_attr *attr)
 {
   printf("  index=%d, name=%s, n_dims=%d, dims=[%d, %d, %d, %d], n_elems=%d, size=%d, fmt=%s, type=%s, qnt_type=%s, "
          "zp=%d, scale=%f\n",
@@ -41,25 +43,28 @@ static void dump_tensor_attr(rknn_tensor_attr* attr)
 
 double __get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
 
-static unsigned char* load_data(FILE* fp, size_t ofst, size_t sz)
+static unsigned char *load_data(FILE *fp, size_t ofst, size_t sz)
 {
-  unsigned char* data;
-  int            ret;
+  unsigned char *data;
+  int ret;
 
   data = NULL;
 
-  if (NULL == fp) {
+  if (NULL == fp)
+  {
     return NULL;
   }
 
   ret = fseek(fp, ofst, SEEK_SET);
-  if (ret != 0) {
+  if (ret != 0)
+  {
     printf("blob seek failure.\n");
     return NULL;
   }
 
-  data = (unsigned char*)malloc(sz);
-  if (data == NULL) {
+  data = (unsigned char *)malloc(sz);
+  if (data == NULL)
+  {
     printf("buffer malloc failure.\n");
     return NULL;
   }
@@ -67,13 +72,14 @@ static unsigned char* load_data(FILE* fp, size_t ofst, size_t sz)
   return data;
 }
 
-static unsigned char* load_model(const char* filename, int* model_size)
+static unsigned char *load_model(const char *filename, int *model_size)
 {
-  FILE*          fp;
-  unsigned char* data;
+  FILE *fp;
+  unsigned char *data;
 
   fp = fopen(filename, "rb");
-  if (NULL == fp) {
+  if (NULL == fp)
+  {
     printf("Open file %s failed.\n", filename);
     return NULL;
   }
@@ -89,11 +95,12 @@ static unsigned char* load_model(const char* filename, int* model_size)
   return data;
 }
 
-static int saveFloat(const char* file_name, float* output, int element_size)
+static int saveFloat(const char *file_name, float *output, int element_size)
 {
-  FILE* fp;
+  FILE *fp;
   fp = fopen(file_name, "w");
-  for (int i = 0; i < element_size; i++) {
+  for (int i = 0; i < element_size; i++)
+  {
     fprintf(fp, "%.6f\n", output[i]);
   }
   fclose(fp);
@@ -107,7 +114,7 @@ static int kps()
 {
   int status = 0;
   const char *model_name = "./model/RK3588/iter-96000.rknn";
-  const  char *image_name = "./model/kps.bmp";
+  const char *image_name = "./model/kps.bmp";
   rknn_context ctx;
   size_t actual_size = 0;
   int img_width = 0;
@@ -278,61 +285,61 @@ static int kps()
   stBoxRect.bottom = stBoxRect.top + 403.95;
   post_process_kps_wrapper(ctx, &img, stBoxRect, resize_buf, output_attrs, &kps_result_group, false);
 
-//   // post process
-//   float scale_w = (float)width / img_width;
-//   float scale_h = (float)height / img_height;
+  //   // post process
+  //   float scale_w = (float)width / img_width;
+  //   float scale_h = (float)height / img_height;
 
-//   detect_result_group_t detect_result_group;
-//   std::vector<float> out_scales;
-//   std::vector<int32_t> out_zps;
-//   for (int i = 0; i < io_num.n_output; ++i)
-//   {
-//     out_scales.push_back(output_attrs[i].scale);
-//     out_zps.push_back(output_attrs[i].zp);
-//   }
-//   // post_process((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, height, width,
-//   //              box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
-//   post_process_acfree((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, (int8_t *)outputs[3].buf, (int8_t *)outputs[4].buf, (int8_t *)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+  //   detect_result_group_t detect_result_group;
+  //   std::vector<float> out_scales;
+  //   std::vector<int32_t> out_zps;
+  //   for (int i = 0; i < io_num.n_output; ++i)
+  //   {
+  //     out_scales.push_back(output_attrs[i].scale);
+  //     out_zps.push_back(output_attrs[i].zp);
+  //   }
+  //   // post_process((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, height, width,
+  //   //              box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+  //   post_process_acfree((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, (int8_t *)outputs[3].buf, (int8_t *)outputs[4].buf, (int8_t *)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
 
-//   printf("number of detected objs --> %d\n", detect_result_group.count);
+  //   printf("number of detected objs --> %d\n", detect_result_group.count);
 
-//   // Draw Objects
-//   char text[256];
-//   for (int i = 0; i < detect_result_group.count; i++)
-//   {
-//     detect_result_t *det_result = &(detect_result_group.results[i]);
-//     sprintf(text, "%s %.1f%%", det_result->name, det_result->prop * 100);
-//     printf("%s @ (%d %d %d %d) %f\n", det_result->name, det_result->box.left, det_result->box.top,
-//            det_result->box.right, det_result->box.bottom, det_result->prop);
-//     int x1 = det_result->box.left;
-//     int y1 = det_result->box.top;
-//     int x2 = det_result->box.right;
-//     int y2 = det_result->box.bottom;
-//     rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(255, 0, 0, 255), 3);
-//     putText(orig_img, text, cv::Point(x1, y1 + 12), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0));
-//   }
+  //   // Draw Objects
+  //   char text[256];
+  //   for (int i = 0; i < detect_result_group.count; i++)
+  //   {
+  //     detect_result_t *det_result = &(detect_result_group.results[i]);
+  //     sprintf(text, "%s %.1f%%", det_result->name, det_result->prop * 100);
+  //     printf("%s @ (%d %d %d %d) %f\n", det_result->name, det_result->box.left, det_result->box.top,
+  //            det_result->box.right, det_result->box.bottom, det_result->prop);
+  //     int x1 = det_result->box.left;
+  //     int y1 = det_result->box.top;
+  //     int x2 = det_result->box.right;
+  //     int y2 = det_result->box.bottom;
+  //     rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(255, 0, 0, 255), 3);
+  //     putText(orig_img, text, cv::Point(x1, y1 + 12), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0));
+  //   }
 
-//   imwrite("./out.jpg", orig_img);
-//   ret = rknn_outputs_release(ctx, io_num.n_output, outputs);
+  //   imwrite("./out.jpg", orig_img);
+  //   ret = rknn_outputs_release(ctx, io_num.n_output, outputs);
 
-//   // loop test
-//   int test_count = 10;
-//   gettimeofday(&start_time, NULL);
-//   for (int i = 0; i < test_count; ++i)
-//   {
-//     rknn_inputs_set(ctx, io_num.n_input, inputs);
-//     ret = rknn_run(ctx, NULL);
-//     ret = rknn_outputs_get(ctx, io_num.n_output, outputs, NULL);
-// #if PERF_WITH_POST
-//     // post_process((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, height, width,
-//     //              box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
-//     post_process_acfree((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, (int8_t *)outputs[3].buf, (int8_t *)outputs[4].buf, (int8_t *)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
-// #endif
-//     ret = rknn_outputs_release(ctx, io_num.n_output, outputs);
-//   }
-//   gettimeofday(&stop_time, NULL);
-//   printf("loop count = %d , average run  %f ms\n", test_count,
-//          (__get_us(stop_time) - __get_us(start_time)) / 1000.0 / test_count);
+  //   // loop test
+  //   int test_count = 10;
+  //   gettimeofday(&start_time, NULL);
+  //   for (int i = 0; i < test_count; ++i)
+  //   {
+  //     rknn_inputs_set(ctx, io_num.n_input, inputs);
+  //     ret = rknn_run(ctx, NULL);
+  //     ret = rknn_outputs_get(ctx, io_num.n_output, outputs, NULL);
+  // #if PERF_WITH_POST
+  //     // post_process((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, height, width,
+  //     //              box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+  //     post_process_acfree((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, (int8_t *)outputs[3].buf, (int8_t *)outputs[4].buf, (int8_t *)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+  // #endif
+  //     ret = rknn_outputs_release(ctx, io_num.n_output, outputs);
+  //   }
+  //   gettimeofday(&stop_time, NULL);
+  //   printf("loop count = %d , average run  %f ms\n", test_count,
+  //          (__get_us(stop_time) - __get_us(start_time)) / 1000.0 / test_count);
 
   deinitPostProcess();
 
@@ -358,7 +365,7 @@ static int kps()
 int main(int argc, char **argv)
 {
   // kps parser demo
-  return kps();
+  // return kps();
 
   int status = 0;
   char *model_name = NULL;
@@ -543,6 +550,44 @@ int main(int argc, char **argv)
     out_scales.push_back(output_attrs[i].scale);
     out_zps.push_back(output_attrs[i].zp);
   }
+
+#if IS_F16_MODEL
+  // save float outputs for debugging
+  for (int i = 0; i < io_num.n_output; ++i)
+  {
+    char path[128];
+    sprintf(path, "./rknn_output_real_nq_%d.txt", i);
+    FILE *fp = fopen(path, "w");
+    uint16_t *output = (uint16_t *)outputs[i].buf;
+    uint32_t n_elems = output_attrs[i].n_elems;
+    for (int j = 0; j < n_elems; j++)
+    {
+      float value = __f16_to_f32_s(output[j]);
+      fprintf(fp, "%f\n", value);
+    }
+    fclose(fp);
+  }
+#else
+  // save float outputs for debugging
+  for (int i = 0; i < io_num.n_output; ++i)
+  {
+    char path[128];
+    sprintf(path, "./rknn_output_real_%d.txt", i);
+    FILE *fp = fopen(path, "w");
+    uint8_t *output = (uint8_t *)outputs[i].buf;
+    float out_scale = output_attrs[i].scale;
+    uint32_t out_zp = output_attrs[i].zp;
+    uint32_t n_elems = output_attrs[i].n_elems;
+    // printf("output idx %d n_elems --> %d \n", i, n_elems);
+    for (int j = 0; j < n_elems; j++)
+    {
+      float value = deqnt_affine_to_f32(output[j], out_zp, out_scale);
+      fprintf(fp, "%f\n", value);
+    }
+    fclose(fp);
+  }
+#endif
+
   // post_process((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, height, width,
   //              box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
   post_process_acfree((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, (int8_t *)outputs[3].buf, (int8_t *)outputs[4].buf, (int8_t *)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
