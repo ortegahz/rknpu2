@@ -39,6 +39,20 @@
 #define KPS_CONF_CALC_ALPHA 0.5
 #define KPS_CONF_THRESH 0.4
 
+typedef struct _POI_FLOAT
+{
+    float x;
+    float y;
+    float conf;
+} POI_FLOAT;
+
+typedef struct _POI
+{
+    int x;
+    int y;
+    float conf;
+} POI;
+
 typedef struct _BOX_RECT
 {
     int left;
@@ -54,6 +68,23 @@ typedef struct pcBOX_RECT_FLOAT
     float top;
     float bottom;
 } BOX_RECT_FLOAT;
+
+typedef struct _detect_result_float_t
+{
+    char name[OBJ_NAME_MAX_SIZE];
+    BOX_RECT_FLOAT box;
+    float prop;
+    POI_FLOAT poi;
+    bool isPlayer;
+    float conf;
+} detect_result_float_t;
+
+typedef struct _detect_result_group_float_t
+{
+    int id;
+    int count;
+    detect_result_float_t results[OBJ_NUMB_MAX_SIZE];
+} detect_result_group_float_t;
 
 typedef struct __detect_result_t
 {
@@ -86,6 +117,8 @@ typedef struct _kps_result_group_t
     int count;
     kps_result_t results[OBJ_NUMB_MAX_SIZE];
 } kps_result_group_t;
+
+int post_process_player_6(uint16_t* input0, uint16_t* input1, uint16_t* input2, uint16_t* input3, uint16_t* input4, int model_in_h, int model_in_w, float conf_threshold, float nms_threshold, float scale_w, float scale_h, detect_result_group_float_t* group);
 
 template<typename t>
 int post_process_kps(t *pt8Input, std::vector<uint32_t> &qnt_zps, std::vector<float> &qnt_scales, float fCenterX, float fCenterY, float fScaleWT, float fScaleHT, kps_result_group_t *group);

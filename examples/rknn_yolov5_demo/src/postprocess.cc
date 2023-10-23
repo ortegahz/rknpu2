@@ -24,6 +24,9 @@
 #include <set>
 #include <vector>
 #define LABEL_NALE_TXT_PATH "./model/coco_80_labels_list.txt"
+#define NUM_OF_STRDES 4
+
+const int strides[NUM_OF_STRDES] = {8, 16, 32, 64};  // TODO: automatic
 
 static char* labels[OBJ_CLASS_NUM];
 
@@ -442,6 +445,237 @@ int post_process_kps(t *ptInput, std::vector<uint32_t> &qnt_zps, std::vector<flo
     group->results[0].kps[i].conf = fConf;
     group->count = 1;
   }
+  return 0;
+}
+
+static int process_player_6(uint16_t* input, uint16_t* poi, int grid_h, int grid_w, int height, int width, int stride,
+                   std::vector<float>& boxes, std::vector<float>& objProbs, std::vector<float>& pois, std::vector<int>& classId, float threshold)
+{
+  int    validCount = 0;
+  int    grid_len   = grid_h * grid_w;
+  float threshold_unsigmoid = unsigmoid(threshold);
+  for (int i = 0; i < grid_h; i++) {
+    for (int j = 0; j < grid_w; j++) {
+          int     offset_c = 0 * grid_len + i * grid_w + j;
+          // uint8_t box_confidence = input[(PROP_BOX_SIZE * a + 4) * grid_len + i * grid_w + j];
+          uint16_t* in_ptr_c = input + offset_c;
+          uint16_t maxClassProbs = in_ptr_c[0];
+          float maxClassProbs_float = __f16_to_f32_s(maxClassProbs);
+          int    maxClassId    = 0;
+
+          // if (i == 9 && j == 46)
+          // {
+          //   printf("[%d %d] maxClassProbs_float --> %f <%d>\n", grid_h, grid_w, maxClassProbs_float, maxClassProbs);
+          // }
+
+          if (maxClassProbs_float < threshold_unsigmoid) continue;
+
+          int     offset_b = 1 * grid_len + i * grid_w + j;
+          uint16_t* in_ptr_b = input + offset_b;
+
+          float   box_l  = __f16_to_f32_s(*in_ptr_b);
+          float   box_t  = __f16_to_f32_s(in_ptr_b[grid_len]);
+          float   box_r  = __f16_to_f32_s(in_ptr_b[2 * grid_len]);
+          float   box_b  = __f16_to_f32_s(in_ptr_b[3 * grid_len]);
+          float box_x1 = j - box_l + 0.5;
+          float box_y1 = i - box_t + 0.5;
+          float box_x2 = j + box_r + 0.5;
+          float box_y2 = i + box_b + 0.5;
+          float box_x = box_x1 * (float)stride;
+          float box_y = box_y1 * (float)stride;
+          float box_w = (box_x2 - box_x1) * (float)stride;
+          float box_h = (box_y2 - box_y1) * (float)stride;
+
+          int pp_x = -1;
+          int pp_y = -1;
+          float pp_c = unsigmoid(0.0);
+          int idx_base = 0;
+          for (int p0 = 0; p0 < NUM_OF_STRDES; p0++)
+          {
+            int stride_pick = strides[p0];
+            int sp = width / stride_pick;
+            int dp = box_h / stride_pick;
+            int ep = box_w / stride_pick;
+            int px = box_x / stride_pick;
+            int py = box_y / stride_pick;
+            // printf("stride_pick --> %d\n", stride_pick);
+            // printf("sp --> %d\n", sp);
+            // printf("idx_base --> %d\n", idx_base);
+            for (int p1 = 0; p1 <= dp; p1++)
+            {
+              for (int p2 = 0; p2 <= ep; p2++)
+              {
+                int sx = p2 + px; int sy =  py + p1;
+                int  offset_p = idx_base + sy * sp + sx;
+                uint16_t* in_ptr_p = poi + offset_p;
+                float value = __f16_to_f32_s(in_ptr_p[0]);
+                // if (i == 46 && j == 54)
+                // {
+                //   printf("sx --> %d and sy --> %d\n", sx, sy);
+                // }
+                // if ((sx == 111) && (sy == 97) && (p0 == 0))
+                // {
+                //   printf("value_sigmoid_pre --> %f\n", sigmoid(value) * 1.0);
+                // }
+                if (value > pp_c)
+                {
+                  pp_x = (p2 + px) * stride_pick;
+                  pp_y = (py + p1) * stride_pick;
+                  pp_c = value;
+                }
+              }
+            }
+            idx_base += width / stride_pick * height / stride_pick;
+          }
+
+          // if (i == 46 && j == 54)
+          // {
+          //   int  offset_p = 0 + 97 * (width / 8) + 111;
+          //   uint16_t* in_ptr_p = poi + offset_p;
+          //   float value = __f16_to_f32_s(in_ptr_p[0]);
+          //   printf("value_sigmoid --> %f\n", sigmoid(value) * 1.0);
+          //   printf("[%d %d] maxClassProbs_float_sigmoid --> %f <%d>\n", grid_h, grid_w, sigmoid(maxClassProbs_float), maxClassProbs);
+          //   printf("pp_x pp_y pp_c --> %d, %d, %f\n", pp_x, pp_y, sigmoid(pp_c) * 1.0);
+          // }
+
+          objProbs.push_back(sigmoid(maxClassProbs_float) * 1.0);
+          classId.push_back(maxClassId);
+          validCount++;
+          boxes.push_back(box_x);
+          boxes.push_back(box_y);
+          boxes.push_back(box_w);
+          boxes.push_back(box_h);
+          pois.push_back(float(pp_x));
+          pois.push_back(float(pp_y));
+          pois.push_back(sigmoid(pp_c) * 1.0);
+    }
+  }
+  return validCount;
+}
+
+int post_process_player_6(uint16_t* input0, uint16_t* input1, uint16_t* input2, uint16_t* input3, uint16_t* input4, int model_in_h, int model_in_w, float conf_threshold, float nms_threshold, float scale_w, float scale_h, detect_result_group_float_t* group)
+{
+  static int init = -1;
+  if (init == -1) {
+    int ret = 0;
+    ret     = loadLabelName(LABEL_NALE_TXT_PATH, labels);
+    if (ret < 0) {
+      return -1;
+    }
+
+    init = 0;
+  }
+  memset(group, 0, sizeof(detect_result_group_float_t));
+
+  std::vector<float> filterBoxes;
+  std::vector<float> objProbs;
+  std::vector<int>   classId;
+  std::vector<float> pois;
+
+  printf("conf_threshold --> %f \n", conf_threshold);
+
+  // stride 8
+  int stride0     = 8;
+  int grid_h0     = model_in_h / stride0;
+  int grid_w0     = model_in_w / stride0;
+  int validCount0 = 0;
+  validCount0 = process_player_6(input0, input4, grid_h0, grid_w0, model_in_h, model_in_w, stride0, filterBoxes, objProbs, pois,
+                        classId, conf_threshold);
+
+  printf("validCount0 --> %d \n", validCount0);
+
+  // stride 16
+  int stride1     = 16;
+  int grid_h1     = model_in_h / stride1;
+  int grid_w1     = model_in_w / stride1;
+  int validCount1 = 0;
+  validCount1 = process_player_6(input1, input4, grid_h1, grid_w1, model_in_h, model_in_w, stride1, filterBoxes, objProbs, pois,
+                        classId, conf_threshold);
+  
+  printf("validCount1 --> %d \n", validCount1);
+
+  // stride 32
+  int stride2     = 32;
+  int grid_h2     = model_in_h / stride2;
+  int grid_w2     = model_in_w / stride2;
+  int validCount2 = 0;
+  validCount2 = process_player_6(input2, input4, grid_h2, grid_w2, model_in_h, model_in_w, stride2, filterBoxes, objProbs, pois,
+                        classId, conf_threshold);
+
+  printf("validCount2 --> %d \n", validCount2);
+
+  // stride 64
+  int stride3     = 64;
+  int grid_h3     = model_in_h / stride3;
+  int grid_w3     = model_in_w / stride3;
+  int validCount3 = 0;
+  validCount3 = process_player_6(input3, input4, grid_h3, grid_w3, model_in_h, model_in_w, stride3, filterBoxes, objProbs, pois,
+                        classId, conf_threshold);
+
+  printf("validCount3 --> %d \n", validCount3);
+
+  int validCount = validCount0 + validCount1 + validCount2 + validCount3;
+
+  printf("validCount --> %d \n", validCount);
+  // no object detect
+  if (validCount <= 0) {
+    return 0;
+  }
+
+  std::vector<int> indexArray;
+  for (int i = 0; i < validCount; ++i) {
+    indexArray.push_back(i);
+  }
+
+  quick_sort_indice_inverse(objProbs, 0, validCount - 1, indexArray);
+
+  std::set<int> class_set(std::begin(classId), std::end(classId));
+
+  for (auto c : class_set) {
+    nms(validCount, filterBoxes, classId, indexArray, c, nms_threshold);
+  }
+
+  int last_count = 0;
+  group->count   = 0;
+  /* box valid detect target */
+  for (int i = 0; i < validCount; ++i) {
+    if (indexArray[i] == -1 || last_count >= OBJ_NUMB_MAX_SIZE) {
+      continue;
+    }
+    int n = indexArray[i];
+
+    float x1       = filterBoxes[n * 4 + 0];
+    float y1       = filterBoxes[n * 4 + 1];
+    float x2       = x1 + filterBoxes[n * 4 + 2];
+    float y2       = y1 + filterBoxes[n * 4 + 3];
+    int   id       = classId[n];
+    float obj_conf = objProbs[i];
+    float poi_x       = pois[n * 3 + 0];
+    float poi_y       = pois[n * 3 + 1];
+    float poi_c       = pois[n * 3 + 2];
+
+    // printf("pp_x pp_y pp_c --> %f, %f, %f\n", poi_x, poi_y, poi_c);
+
+    group->results[last_count].box.left   = clamp(x1, 0, model_in_w) / scale_w;
+    group->results[last_count].box.top    = clamp(y1, 0, model_in_h) / scale_h;
+    group->results[last_count].box.right  = clamp(x2, 0, model_in_w) / scale_w;
+    group->results[last_count].box.bottom = clamp(y2, 0, model_in_h) / scale_h;
+    group->results[last_count].prop       = obj_conf;
+    group->results[last_count].poi.x = poi_x / scale_w;
+    group->results[last_count].poi.y = poi_y / scale_h;
+    group->results[last_count].poi.conf = poi_c;
+    char* label                           = labels[id];
+    strncpy(group->results[last_count].name, label, OBJ_NAME_MAX_SIZE);
+
+    // printf("result %2d: (%4d, %4d, %4d, %4d), %s\n", i, group->results[last_count].box.left,
+    // group->results[last_count].box.top,
+    //        group->results[last_count].box.right, group->results[last_count].box.bottom, label);
+    last_count++;
+  }
+  group->count = last_count;
+
+  printf("last_count --> %d \n", last_count);
+
   return 0;
 }
 

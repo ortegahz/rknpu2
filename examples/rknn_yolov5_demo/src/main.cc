@@ -542,7 +542,7 @@ int main(int argc, char **argv)
   float scale_w = (float)width / img_width;
   float scale_h = (float)height / img_height;
 
-  detect_result_group_t detect_result_group;
+  detect_result_group_float_t detect_result_group;
   std::vector<float> out_scales;
   std::vector<int32_t> out_zps;
   for (int i = 0; i < io_num.n_output; ++i)
@@ -588,51 +588,38 @@ int main(int argc, char **argv)
   }
 #endif
 
-  return 0;
-
   // post_process((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, height, width,
   //              box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
-  post_process_acfree((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, (int8_t *)outputs[3].buf, (int8_t *)outputs[4].buf, (int8_t *)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+  // post_process_acfree((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, (int8_t *)outputs[3].buf, (int8_t *)outputs[4].buf, (int8_t *)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+#if IS_F16_MODEL
+  post_process_player_6((uint16_t *)outputs[0].buf, (uint16_t *)outputs[1].buf, (uint16_t *)outputs[2].buf, (uint16_t *)outputs[3].buf, (uint16_t *)outputs[4].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, &detect_result_group);
+#endif
 
   printf("number of detected objs --> %d\n", detect_result_group.count);
 
-  // Draw Objects
-  char text[256];
+  // Save Parser Results
+  FILE *fid = fopen("npu_parser_results.txt", "w");
+  assert(fid != NULL);
   for (int i = 0; i < detect_result_group.count; i++)
   {
-    detect_result_t *det_result = &(detect_result_group.results[i]);
-    sprintf(text, "%s %.1f%%", det_result->name, det_result->prop * 100);
-    printf("%s @ (%d %d %d %d) %f\n", det_result->name, det_result->box.left, det_result->box.top,
-           det_result->box.right, det_result->box.bottom, det_result->prop);
-    int x1 = det_result->box.left;
-    int y1 = det_result->box.top;
-    int x2 = det_result->box.right;
-    int y2 = det_result->box.bottom;
-    rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(255, 0, 0, 255), 3);
-    putText(orig_img, text, cv::Point(x1, y1 + 12), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0));
+    detect_result_float_t *det_result = &(detect_result_group.results[i]);
+    // printf("%s @ (%d %d %d %d) %f\n", det_result->name, det_result->box.left, det_result->box.top,
+    //        det_result->box.right, det_result->box.bottom, det_result->prop);
+    float x1 = det_result->box.left;
+    float y1 = det_result->box.top;
+    float x2 = det_result->box.right;
+    float y2 = det_result->box.bottom;
+    float xc = (x1 + x2) / 2 / (float)width;
+    float yc = (y1 + y2) / 2 / (float)height;
+    float w = (x2 - x1) / (float)width;
+    float h = (y2 - y1) / (float)height;
+    int x = det_result->poi.x;
+    int y = det_result->poi.y;
+    float conf = det_result->poi.conf;
+    // TODO: auto class id
+    fprintf(fid, "0, %f, %f,  %f, %f, %d, %d, %f, %f\n", xc, yc, w, h, x, y, conf, det_result->prop);
   }
-
-  imwrite("./out.jpg", orig_img);
-  ret = rknn_outputs_release(ctx, io_num.n_output, outputs);
-
-  // loop test
-  int test_count = 10;
-  gettimeofday(&start_time, NULL);
-  for (int i = 0; i < test_count; ++i)
-  {
-    rknn_inputs_set(ctx, io_num.n_input, inputs);
-    ret = rknn_run(ctx, NULL);
-    ret = rknn_outputs_get(ctx, io_num.n_output, outputs, NULL);
-#if PERF_WITH_POST
-    // post_process((int8_t*)outputs[0].buf, (int8_t*)outputs[1].buf, (int8_t*)outputs[2].buf, height, width,
-    //              box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
-    post_process_acfree((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, (int8_t *)outputs[3].buf, (int8_t *)outputs[4].buf, (int8_t *)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
-#endif
-    ret = rknn_outputs_release(ctx, io_num.n_output, outputs);
-  }
-  gettimeofday(&stop_time, NULL);
-  printf("loop count = %d , average run  %f ms\n", test_count,
-         (__get_us(stop_time) - __get_us(start_time)) / 1000.0 / test_count);
+  fclose(fid);
 
   deinitPostProcess();
 
