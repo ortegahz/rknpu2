@@ -592,9 +592,9 @@ int main(int argc, char **argv)
   //              box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
   // post_process_acfree((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, (int8_t *)outputs[3].buf, (int8_t *)outputs[4].buf, (int8_t *)outputs[5].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
 #if IS_F16_MODEL
-  post_process_player_6 <uint16_t> ((uint16_t *)outputs[0].buf, (uint16_t *)outputs[1].buf, (uint16_t *)outputs[2].buf, (uint16_t *)outputs[3].buf, (uint16_t *)outputs[4].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+  post_process_player_6<uint16_t>((uint16_t *)outputs[0].buf, (uint16_t *)outputs[1].buf, (uint16_t *)outputs[2].buf, (uint16_t *)outputs[3].buf, (uint16_t *)outputs[4].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
 #else
-  post_process_player_6 <int8_t> ((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, (int8_t *)outputs[3].buf, (int8_t *)outputs[4].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
+  post_process_player_6<int8_t>((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, (int8_t *)outputs[3].buf, (int8_t *)outputs[4].buf, height, width, box_conf_threshold, nms_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
 #endif
 
   printf("number of detected objs --> %d\n", detect_result_group.count);
@@ -639,10 +639,12 @@ int main(int argc, char **argv)
     float y2 = det_result->box.bottom;
     bool isPlayer = det_result->isPlayer;
     // draw box
-    if (isPlayer) {
+    if (isPlayer)
+    {
       rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(255, 0, 0, 255), 3);
     }
-    else {
+    else
+    {
       rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 0, 255, 255), 3);
     }
     putText(orig_img, text, cv::Point(x1, y1 + 12), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0));
