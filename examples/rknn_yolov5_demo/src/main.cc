@@ -26,7 +26,7 @@
 #include "postprocess.h"
 
 #define PERF_WITH_POST 1
-#define IS_F16_MODEL 0
+#define IS_F16_MODEL 1
 
 /*-------------------------------------------
                   Functions
@@ -283,7 +283,11 @@ static int kps()
   stBoxRect.top = 231.12;
   stBoxRect.right = stBoxRect.left + 270.17;
   stBoxRect.bottom = stBoxRect.top + 403.95;
+#if IS_F16_MODEL
+  post_process_kps_wrapper(ctx, &img, stBoxRect, resize_buf, output_attrs, &kps_result_group, true);
+#else
   post_process_kps_wrapper(ctx, &img, stBoxRect, resize_buf, output_attrs, &kps_result_group, false);
+#endif
 
   //   // post process
   //   float scale_w = (float)width / img_width;
