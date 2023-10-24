@@ -356,6 +356,8 @@ static int process(int8_t *input, int *anchor, int grid_h, int grid_w, int heigh
 template <typename t>
 int post_process_kps(t *ptInput, std::vector<uint32_t> &qnt_zps, std::vector<float> &qnt_scales, float fCenterX, float fCenterY, float fScaleWT, float fScaleHT, kps_result_group_t *group)
 {
+  printf("std::is_same<t, uint16_t>::value --> %d \n", std::is_same<t, uint16_t>::value);
+  printf("std::is_same<t, uint8_t>::value --> %d \n", std::is_same<t, uint8_t>::value);
   int iGridLen = KPS_OUTPUT_SHAPE_H * KPS_OUTPUT_SHAPE_W;
   for (int i = 0; i < KPS_KEYPOINT_NUM; i++)
   {
@@ -368,8 +370,6 @@ int post_process_kps(t *ptInput, std::vector<uint32_t> &qnt_zps, std::vector<flo
         float fValue;
         int iOffset = i * iGridLen + j * KPS_OUTPUT_SHAPE_W + k;
         t tValue = ptInput[iOffset];
-        printf("std::is_same<t, uint16_t>::value --> %d \n", std::is_same<t, uint16_t>::value);
-        printf("std::is_same<t, uint8_t>::value --> %d \n", std::is_same<t, uint8_t>::value);
         if (std::is_same<t, uint16_t>::value)
         {
           fValue = __f16_to_f32_s(tValue);

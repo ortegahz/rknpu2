@@ -110,12 +110,12 @@ static int saveFloat(const char *file_name, float *output, int element_size)
 /*-------------------------------------------
                   KPS Functions
 -------------------------------------------*/
-static int kps()
+static int kps(rknn_context *pCtx, rknn_tensor_attr *output_attrs)
 {
   int status = 0;
   const char *model_name = "./model/RK3588/iter-96000.rknn";
   const char *image_name = "./model/kps.bmp";
-  rknn_context ctx;
+  rknn_context ctx = *pCtx;
   size_t actual_size = 0;
   int img_width = 0;
   int img_height = 0;
@@ -194,8 +194,8 @@ static int kps()
     dump_tensor_attr(&(input_attrs[i]));
   }
 
-  rknn_tensor_attr output_attrs[io_num.n_output];
-  memset(output_attrs, 0, sizeof(output_attrs));
+  // rknn_tensor_attr output_attrs[io_num.n_output];
+  // memset(output_attrs, 0, sizeof(output_attrs));
   for (int i = 0; i < io_num.n_output; i++)
   {
     output_attrs[i].index = i;
@@ -348,7 +348,7 @@ static int kps()
   deinitPostProcess();
 
   // release
-  ret = rknn_destroy(ctx);
+  // ret = rknn_destroy(ctx);
 
   if (model_data)
   {
@@ -360,6 +360,7 @@ static int kps()
     free(resize_buf);
   }
 
+  *pCtx = ctx;
   return 0;
 }
 
@@ -370,6 +371,10 @@ int main(int argc, char **argv)
 {
   // kps parser demo
   // return kps();
+  // rknn_context ctx_kps = kps();
+  rknn_context ctx_kps;
+  rknn_tensor_attr output_attrs_kps[1];
+  kps(&ctx_kps, output_attrs_kps);
 
   int status = 0;
   char *model_name = NULL;
@@ -629,6 +634,132 @@ int main(int argc, char **argv)
   }
   fclose(fid);
 
+  // model ensamble
+  cv::Mat Img = cv::imread("./model/player_1280.bmp");
+  FILE *pFileHandle = fopen("npu_parser_final_results.txt", "w");
+  assert(pFileHandle != NULL);
+  // rknn_tensor_attr output_attrs_kps[1];
+  // memset(output_attrs_kps, 0, sizeof(output_attrs_kps));
+  // for (int i = 0; i < 1; i++)
+  // {
+  //   output_attrs_kps[i].index = i;
+  //   ret = rknn_query(ctx_kps, RKNN_QUERY_OUTPUT_ATTR, &(output_attrs_kps[i]), sizeof(rknn_tensor_attr));
+  //   dump_tensor_attr(&(output_attrs_kps[i]));
+  // }
+  for (int i = 0; i < detect_result_group.count; i++)
+  {
+    detect_result_float_t *det_result = &(detect_result_group.results[i]);
+    float x1 = det_result->box.left;
+    float y1 = det_result->box.top;
+    float x2 = det_result->box.right;
+    float y2 = det_result->box.bottom;
+    float xc = (x1 + x2) / 2 / (float)width;
+    float yc = (y1 + y2) / 2 / (float)height;
+    float w = (x2 - x1) / (float)width;
+    float h = (y2 - y1) / (float)height;
+    int x = det_result->poi.x;
+    int y = det_result->poi.y;
+    float conf = det_result->poi.conf;
+
+    // void *resize_buf = malloc(height * width * channel);
+    void *resize_buf = malloc(KPS_INPUT_SHAPE_H * KPS_INPUT_SHAPE_W * 3);
+    // unsigned char *p = (unsigned char *) resize_buf;
+
+    // float fXC = (x1 + x2) / 2;
+    // float fYC = (y1 + y2) / 2;
+    float fWE = (x2 - x1) * KPS_W_EXTENTION;
+    float fHE = (y2 - y1) * KPS_H_EXTENTION;
+    pcBOX_RECT_FLOAT stBoxRect = {0};
+    stBoxRect.left = x1;
+    stBoxRect.top = y1;
+    stBoxRect.right = x1 + fWE / 2.;
+    stBoxRect.bottom = y1 + fHE / 2.;
+
+    // stBoxRect.left = 825.;
+    // stBoxRect.top = 679.;
+    // stBoxRect.right = stBoxRect.left + 111.1;
+    // stBoxRect.bottom = stBoxRect.top + 244.2;
+
+    printf("[i] stBoxRect.left, stBoxRect.top, fWE, fHE --> %d, %f, %f, %f, %f \n", i, stBoxRect.left, stBoxRect.top, fWE, fHE);
+    // return 0;
+
+    kps_result_group_t kps_result_group;
+
+#if IS_F16_MODEL
+    post_process_kps_wrapper(ctx_kps, &Img, stBoxRect, resize_buf, output_attrs_kps, &kps_result_group, true);
+#else
+    post_process_kps_wrapper(ctx_kps, &Img, stBoxRect, resize_buf, output_attrs_kps, &kps_result_group, false);
+#endif
+
+    // post_process_kps_f16_wrapper(ctx_kps, &Img, stBoxRect, resize_buf, output_attrs, &kps_result_group);
+
+    fprintf(pFileHandle, "0, %f, %f,  %f, %f, %d, %d, %f, %f ", xc, yc, w, h, x, y, conf, det_result->prop);
+    for (int j = 0; j < KPS_KEYPOINT_NUM; j++)
+    {
+      float x = (float)kps_result_group.results->kps[j].x;
+      float y = (float)kps_result_group.results->kps[j].y;
+      float conf = kps_result_group.results->kps[j].conf;
+      fprintf(pFileHandle, "%f,  %f, %f ", x, y, conf);
+    }
+    fprintf(pFileHandle, "\n");
+
+    // kps_result_group.results->kps[7].x = 917.36; kps_result_group.results->kps[7].y = 763.21; kps_result_group.results->kps[7].conf = 1.1368;
+    // kps_result_group.results->kps[8].x = 839.41; kps_result_group.results->kps[8].y = 765.37; kps_result_group.results->kps[8].conf = 0.99745;
+    // kps_result_group.results->kps[9].x = 911.95; kps_result_group.results->kps[9].y = 772.95; kps_result_group.results->kps[9].conf = 0.97398;
+    // kps_result_group.results->kps[10].x = 864.31; kps_result_group.results->kps[10].y = 768.62; kps_result_group.results->kps[10].conf = 1.0892;
+    // det_result->prop = 0.92078;
+    // fHE = 244.2; fWE = 111.1;
+
+    float fAreaSqrt = sqrt(fHE * fWE);
+
+    printf("fAreaSqrt --> %f \n", fAreaSqrt);
+
+    float fDirRX = kps_result_group.results->kps[10].x - kps_result_group.results->kps[8].x;
+    float fDirRY = kps_result_group.results->kps[10].y - kps_result_group.results->kps[8].y;
+    float fNormR = sqrt(pow(fDirRX, 2) + pow(fDirRY, 2));
+    fDirRX /= fNormR;
+    fDirRY /= fNormR;
+    float fDirLX = kps_result_group.results->kps[9].x - kps_result_group.results->kps[7].x;
+    float fDirLY = kps_result_group.results->kps[9].y - kps_result_group.results->kps[7].y;
+    float fNormL = sqrt(pow(fDirLX, 2) + pow(fDirLY, 2));
+    fDirLX /= fNormL;
+    fDirLY /= fNormL;
+
+    printf("fDirLX, fDirLY --> %f, %f \n", fDirLX, fDirLY);
+    printf("fDirRX, fDirRY --> %f, %f \n", fDirRX, fDirRY);
+
+    float fDirRPX = det_result->poi.x - kps_result_group.results->kps[10].x;
+    float fDirRPY = det_result->poi.y - kps_result_group.results->kps[10].y;
+    float fNormRP = sqrt(pow(fDirRPX, 2) + pow(fDirRPY, 2));
+    fDirRPX /= fNormRP;
+    fDirRPY /= fNormRP;
+    printf("fDirRPX, fDirRPY --> %f, %f \n", fDirRPX, fDirRPY);
+    float fWR = 2. - (fDirRPX * fDirRX + fDirRPY * fDirRY);
+    float fDistR = fNormRP * fWR / fAreaSqrt * KPS_CONF_CALC_SCALE;
+    float fDirLPX = det_result->poi.x - kps_result_group.results->kps[9].x;
+    float fDirLPY = det_result->poi.y - kps_result_group.results->kps[9].y;
+    float fNormLP = sqrt(pow(fDirLPX, 2) + pow(fDirLPY, 2));
+    fDirLPX /= fNormLP;
+    fDirLPY /= fNormLP;
+    printf("fDirLPX, fDirLPY --> %f, %f \n", fDirLPX, fDirLPY);
+    float fWL = 2. - (fDirLPX * fDirLX + fDirLPY * fDirLY);
+    float fDistL = fNormLP * fWL / fAreaSqrt * KPS_CONF_CALC_SCALE;
+
+    printf("fDistL, fDistR --> %f, %f \n", fDistL, fDistR);
+
+    float fConfKPS = (1. / (fDistL + 1.) * kps_result_group.results->kps[9].conf * det_result->poi.conf + 1. / (fDistR + 1.) * kps_result_group.results->kps[10].conf * det_result->poi.conf) / 2.;
+    printf("fConfKPS --> %f \n", fConfKPS);
+    float fConf = KPS_CONF_CALC_ALPHA * det_result->prop + (1 - KPS_CONF_CALC_ALPHA) * fConfKPS;
+    printf("fConf --> %f \n", fConf);
+    // return 0;
+    det_result->conf = fConf;
+    if (fConf > KPS_CONF_THRESH)
+    {
+      det_result->isPlayer = true;
+    }
+  }
+  fclose(pFileHandle);
+
   // Draw Objects
   char text[256];
   for (int i = 0; i < detect_result_group.count; i++)
@@ -645,11 +776,11 @@ int main(int argc, char **argv)
     // draw box
     if (isPlayer)
     {
-      rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(255, 0, 0, 255), 3);
+      rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 0, 255, 255), 3);
     }
     else
     {
-      rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 0, 255, 255), 3);
+      rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 255, 0, 255), 3);
     }
     putText(orig_img, text, cv::Point(x1, y1 + 12), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0));
   }
